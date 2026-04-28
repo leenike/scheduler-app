@@ -1,4 +1,4 @@
-name: Send Alarms
+name: Send Alarms v2
 
 on:
   schedule:
