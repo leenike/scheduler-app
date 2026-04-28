@@ -1,1 +1,11 @@
-
+name: Send Alarms
+on:
+  schedule:
+    - cron: '* * * * *'
+  workflow_dispatch:
+jobs:
+  trigger-alarm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger
+        run: curl -s -X POST "https://gentle-speculoos-fe66c3.netlify.app/.netlify/functions/send-alarm"
