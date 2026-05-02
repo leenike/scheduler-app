@@ -3,12 +3,16 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
-<meta name="theme-color" content="#121212"/>
+<meta name="theme-color" content="#1ed760"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-<meta name="apple-mobile-web-app-title" content="일정관리"/>
-<title>내 일정 & 할일</title>
-<link rel="manifest" href="manifest.json"/>
+<meta name="apple-mobile-web-app-title" content="Scheduler"/>
+<meta name="description" content="스마트한 일정 & 할일 관리"/>
+<link rel="manifest" href="/manifest.json"/>
+<link rel="apple-touch-icon" href="/icon-192.png"/>
+<link rel="icon" type="image/png" href="/icon-192.png"/>
+<link rel="shortcut icon" href="/icon-192.png"/>
+<title>To do Scheduler</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',helvetica,arial,'Hiragino Sans','Hiragino Kaku Gothic ProN',Meiryo,'MS Gothic','Noto Sans KR',sans-serif;background:#121212;color:#fff;overscroll-behavior:none}
@@ -16,63 +20,50 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',helvetica,ari
 input,select,textarea{color-scheme:dark}
 select option{background:#1f1f1f;color:#fff}
 ::-webkit-scrollbar{width:0;background:transparent}
-input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(1);opacity:0.5}
+input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(1);opacity:1}
+#splash{position:fixed;inset:0;background:#121212;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;z-index:9999;transition:opacity 0.4s ease}
+#splash.hide{opacity:0;pointer-events:none}
+#splash img{width:80px;height:80px;border-radius:20px}
+@keyframes spin{to{transform:rotate(360deg)}}
+#splash-ring{width:36px;height:36px;border:3px solid #252525;border-top-color:#1ed760;border-radius:50%;animation:spin 0.8s linear infinite}
+#splash-text{color:#b3b3b3;font-size:13px;font-family:-apple-system,sans-serif}
 </style>
 </head>
 <body>
+<div id="splash">
+  <img src="/icon-192.png" alt="logo" onerror="this.style.display='none'"/>
+  <div id="splash-ring"></div>
+  <div id="splash-text">로딩 중...</div>
+</div>
 <div id="root"></div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
-<script>
-const firebaseConfig = {
-  apiKey: "AIzaSyADNy32WP27_hBl4esATFhSvUJEZZmCECQ",
-  authDomain: "scheduler-app-806ec.firebaseapp.com",
-  projectId: "scheduler-app-806ec",
-  storageBucket: "scheduler-app-806ec.firebasestorage.app",
-  messagingSenderId: "404232236572",
-  appId: "1:404232236572:web:7a1ef0b82ceb88dbbd39d9"
-};
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
-const messaging = firebase.messaging();
-</script>
-<script type="text/babel">
-const {useState,useEffect,useRef,useCallback}=React;
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js" crossorigin></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js" crossorigin></script>
+<script type="text/babel" data-presets="react,env">
 
-// ── Spotify Design Tokens ──────────────────────────────
+const {useState,useEffect,useRef,useCallback}=React;
+const _firedAlarms=new Set(); // 컴포넌트 외부 - 재렌더링에도 유지
+
 const DS={
-  bg:"#121212",
-  surface:"#181818",
-  surfaceMid:"#1f1f1f",
-  surfaceHigh:"#252525",
-  green:"#1ed760",
-  greenDark:"#1db954",
-  white:"#ffffff",
-  silver:"#b3b3b3",
-  border:"#4d4d4d",
-  borderLight:"#7c7c7c",
-  negative:"#f3727f",
-  warning:"#ffa42b",
+  bg:"#121212",surface:"#181818",surfaceMid:"#1f1f1f",surfaceHigh:"#252525",
+  green:"#1ed760",greenDark:"#1db954",white:"#ffffff",silver:"#b3b3b3",
+  border:"#4d4d4d",borderLight:"#7c7c7c",negative:"#f3727f",warning:"#ffa42b",
   info:"#539df5",
-  shadowHeavy:"rgba(0,0,0,0.5) 0px 8px 24px",
-  shadowMed:"rgba(0,0,0,0.3) 0px 8px 8px",
+  shadowHeavy:"rgba(0,0,0,0.5) 0px 8px 24px",shadowMed:"rgba(0,0,0,0.3) 0px 8px 8px",
   insetBorder:"rgb(18,18,18) 0px 1px 0px, rgb(124,124,124) 0px 0px 0px 1px inset",
 };
 
-// ── Priority colors adapted for dark theme ──────────────
 const DAYS=["일","월","화","수","목","금","토"];
 const MONTHS=["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"];
 const PRIORITIES=[
   {id:"A1",color:"#f3727f",bg:"rgba(243,114,127,0.15)",desc:"최우선"},
-  {id:"A2",color:"#ffa42b",bg:"rgba(255,164,43,0.15)",desc:"긴급"},
-  {id:"B1",color:"#ffd700",bg:"rgba(255,215,0,0.12)",desc:"중요"},
-  {id:"B2",color:"#1ed760",bg:"rgba(30,215,96,0.12)",desc:"보통"},
-  {id:"C",color:"#539df5",bg:"rgba(83,157,245,0.12)",desc:"낮음"},
-  {id:"D",color:"#b3b3b3",bg:"rgba(179,179,179,0.1)",desc:"여유"},
+  {id:"A2",color:"#ff8fa3",bg:"rgba(255,143,163,0.15)",desc:"긴급"},
+  {id:"B1",color:"#ffa42b",bg:"rgba(255,164,43,0.15)",desc:"중요"},
+  {id:"B2",color:"#ffc96b",bg:"rgba(255,201,107,0.15)",desc:"보통"},
+  {id:"C1",color:"#1ed760",bg:"rgba(30,215,96,0.12)",desc:"낮음"},
+  {id:"C2",color:"#76e8a0",bg:"rgba(118,232,160,0.12)",desc:"여유"},
+  {id:"D1",color:"#539df5",bg:"rgba(83,157,245,0.12)",desc:"나중에"},
+  {id:"D2",color:"#90bff9",bg:"rgba(144,191,249,0.12)",desc:"선택"},
 ];
 const EV_COLORS=["#539df5","#ffa42b","#1ed760","#a855f7","#f3727f","#ffd700"];
 const REPEAT_UNITS=[{v:"none",l:"반복 없음"},{v:"min",l:"분"},{v:"hour",l:"시간"},{v:"day",l:"일"},{v:"week",l:"주"},{v:"month",l:"월"},{v:"year",l:"연"}];
@@ -80,85 +71,57 @@ const REPEAT_UNITS=[{v:"none",l:"반복 없음"},{v:"min",l:"분"},{v:"hour",l:"
 const toDateStr=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 const todayStr=()=>toDateStr(new Date());
 const nowTime=()=>{const n=new Date();return `${String(n.getHours()).padStart(2,"0")}:${String(n.getMinutes()).padStart(2,"0")}`;};
-const coversDate=(item,ds)=>{if(!item.date)return false;if(item.allDay&&item.endDate)return ds>=item.date&&ds<=item.endDate;return item.date===ds;};
+const coversDate=(item,ds)=>{
+  if(!item.date)return false;
+  if(item.allDay&&item.endDate)return ds>=item.date&&ds<=item.endDate;
+  if(item.date===ds)return true;
+  if(!item.repeat||item.repeat==="none")return false;
+  if(ds<item.date)return false;
+  const base=new Date(item.date+"T00:00:00");
+  const target=new Date(ds+"T00:00:00");
+  const val=item.repeatVal||1;
+  const diffMs=target-base;
+  const diffDays=Math.round(diffMs/(1000*60*60*24));
+  if(item.repeat==="min"||item.repeat==="hour") return item.date===ds;
+  if(item.repeat==="day") return diffDays%val===0;
+  if(item.repeat==="week") return diffDays%(val*7)===0;
+  if(item.repeat==="month"){
+    const diffMonths=(target.getFullYear()-base.getFullYear())*12+(target.getMonth()-base.getMonth());
+    return diffMonths%val===0&&target.getDate()===base.getDate();
+  }
+  if(item.repeat==="year"){
+    const diffYears=target.getFullYear()-base.getFullYear();
+    return diffYears%val===0&&target.getMonth()===base.getMonth()&&target.getDate()===base.getDate();
+  }
+  return false;
+};
 const getPri=id=>PRIORITIES.find(p=>p.id===id)||PRIORITIES[3];
 const isMeeting=t=>/미팅|meeting|회의|mtg|미트|약속/i.test(t||"");
 const isPastEvent=item=>{if(!item.date||item.allDay)return false;return new Date(`${item.date}T${item.time||"23:59"}`)<new Date();};
 
-const toICSLocal=dt=>{const p=n=>String(n).padStart(2,"0");return `${dt.getFullYear()}${p(dt.getMonth()+1)}${p(dt.getDate())}T${p(dt.getHours())}${p(dt.getMinutes())}00`;};
-const TZID="Asia/Seoul";
-
-const exportToCalendar=(item)=>{
-  const uid=`${item.id}-${Date.now()}@scheduler`;
-  const stamp=toICSLocal(new Date());
-  let dtstart,dtend;
-  if(item.allDay){
-    dtstart=`DTSTART;VALUE=DATE:${item.date.replace(/-/g,"")}`;
-    const endDate=item.endDate||item.date;
-    const nextDay=new Date(endDate);nextDay.setDate(nextDay.getDate()+1);
-    dtend=`DTEND;VALUE=DATE:${toDateStr(nextDay).replace(/-/g,"")}`;
-  }else{
-    const dt=new Date(item.date+"T"+item.time+":00");
-    dtstart=`DTSTART;TZID=${TZID}:${toICSLocal(dt)}`;
-    const dtE=new Date(dt.getTime()+60*60*1000);
-    dtend=`DTEND;TZID=${TZID}:${toICSLocal(dtE)}`;
-  }
-  const alarmBlocks=(item.alarms||[]).map(a=>{
-    const totalMins=(a.days||0)*1440+(a.hours||0)*60+(a.mins||0);
-    const trigger=totalMins===0?"PT0S":`-PT${totalMins}M`;
-    return["BEGIN:VALARM","ACTION:DISPLAY",`TRIGGER:${trigger}`,`DESCRIPTION:⏰ ${item.title}`,"END:VALARM"].join("\r\n");
-  });
-  if(alarmBlocks.length===0)alarmBlocks.push(["BEGIN:VALARM","ACTION:DISPLAY","TRIGGER:-PT15M",`DESCRIPTION:⏰ ${item.title}`,"END:VALARM"].join("\r\n"));
-  const lines=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Scheduler//KR","CALSCALE:GREGORIAN","METHOD:PUBLISH","BEGIN:VTIMEZONE",`TZID:${TZID}`,"BEGIN:STANDARD","DTSTART:19700101T000000","TZOFFSETFROM:+0900","TZOFFSETTO:+0900","TZNAME:KST","END:STANDARD","END:VTIMEZONE","BEGIN:VEVENT",`UID:${uid}`,`DTSTAMP:${stamp}`,dtstart,dtend,`SUMMARY:${item.title}`,item.location?`LOCATION:${item.location.replace(/\n/g,"\\n")}`:"",item.memo?`DESCRIPTION:${item.memo.replace(/\n/g,"\\n")}`:"", ...alarmBlocks,"END:VEVENT","END:VCALENDAR"].filter(Boolean);
-  const blob=new Blob([lines.join("\r\n")],{type:"text/calendar;charset=utf-8"});
-  const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=`${item.title}.ics`;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
-};
-
 const INIT=[
-  {id:1,type:"event",title:"팀 미팅",date:todayStr(),endDate:"",time:"10:00",allDay:false,alarms:[{days:0,hours:1,mins:0,sound:"normal",repeat:"none",repeatVal:1}],done:false,priority:"",hasMeeting:true,location:"서울시 강남구 테헤란로 123",locationMemo:"3층 회의실 A",memo:""},
+  {id:1,type:"event",title:"팀 미팅",date:todayStr(),endDate:"",time:"10:00",allDay:false,alarms:[{days:0,hours:1,mins:0,sound:"normal"}],done:false,priority:"",hasMeeting:true,location:"서울시 강남구 테헤란로 123",locationMemo:"3층 회의실 A",memo:""},
   {id:2,type:"todo",title:"주간 보고서 작성",date:"",endDate:"",time:"",allDay:false,alarms:[],done:false,priority:"A1",hasMeeting:false,location:"",locationMemo:"",memo:""},
   {id:3,type:"todo",title:"이메일 답장",date:"",endDate:"",time:"",allDay:false,alarms:[],done:false,priority:"B1",hasMeeting:false,location:"",locationMemo:"",memo:""},
-  {id:4,type:"todo",title:"운동 30분",date:"",endDate:"",time:"",allDay:false,alarms:[],done:true,priority:"C",hasMeeting:false,location:"",locationMemo:"",memo:""},
+  {id:4,type:"todo",title:"운동 30분",date:"",endDate:"",time:"",allDay:false,alarms:[],done:true,priority:"C1",hasMeeting:false,location:"",locationMemo:"",memo:""},
 ];
 const EMPTY_SCHED=(date="")=>({allDay:false,date,endDate:"",time:date===todayStr()?nowTime():"09:00",alarms:[],repeat:"none",repeatVal:1});
-const EMPTY_ALARM=()=>({days:0,hours:0,mins:0,sound:"normal",repeat:"none",repeatVal:1});
+const EMPTY_ALARM=()=>({days:0,hours:0,mins:0,sound:"normal"});
 
-// ── Shared input style ────────────────────────────────
 const inputSt={width:"100%",border:"none",borderRadius:8,padding:"10px 12px",fontSize:13,boxSizing:"border-box",outline:"none",background:DS.surfaceMid,color:DS.white,boxShadow:DS.insetBorder};
 const selectSt={...inputSt,cursor:"pointer"};
 const textareaSt={...inputSt,resize:"none"};
 const cardSt={background:DS.surface,borderRadius:12,padding:"16px",marginBottom:12,boxShadow:DS.shadowMed};
 
-// ── Pill Button ───────────────────────────────────────
-const Pill=({active,onClick,children,green,full,style={}})=>(
-  <button onClick={onClick} style={{
-    flex:full?undefined:1,width:full?"100%":undefined,
-    background:green?DS.green:active?DS.white:DS.surfaceMid,
-    color:green?"#000":active?"#000":DS.silver,
-    border:"none",borderRadius:9999,
-    padding:"10px 16px",fontSize:13,fontWeight:700,
-    letterSpacing:"0.5px",cursor:"pointer",
-    transition:"all 0.15s",
-    boxShadow:active||green?DS.shadowMed:"none",
-    ...style
-  }}>{children}</button>
-);
-
-// ── Section Label ─────────────────────────────────────
 const Label=({children})=><div style={{fontSize:11,fontWeight:700,color:DS.silver,marginBottom:6,letterSpacing:"1px",textTransform:"uppercase"}}>{children}</div>;
 
-// ── Alarm Section ─────────────────────────────────────
 function AlarmSection({alarms,setAlarms}){
-  const [drafts,setDrafts]=useState(()=>alarms.map(a=>({days:String(a.days??0),hours:String(a.hours??0),mins:String(a.mins??0)})));
-  useEffect(()=>{setDrafts(alarms.map(a=>({days:String(a.days??0),hours:String(a.hours??0),mins:String(a.mins??0)})));},[alarms.length]);
   const upd=(i,patch)=>setAlarms(prev=>{const a=[...prev];a[i]={...a[i],...patch};return a;});
-  const chg=(i,k,raw)=>{if(!/^\d*$/.test(raw))return;setDrafts(prev=>{const d=[...prev];d[i]={...d[i],[k]:raw};return d;});};
-  const blur=(i,k,raw)=>{const max={days:99,hours:23,mins:59}[k]??99;const v=Math.max(0,Math.min(max,parseInt(raw)||0));setDrafts(prev=>{const d=[...prev];d[i]={...d[i],[k]:String(v)};return d;});upd(i,{[k]:v});};
   return(
     <div>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
         <Label>🔔 알람 설정</Label>
-        {alarms.length<3&&<button onClick={()=>{setAlarms(p=>[...p,EMPTY_ALARM()]);setDrafts(p=>[...p,{days:"0",hours:"0",mins:"0"}]);}} style={{background:DS.green,color:"#000",border:"none",borderRadius:9999,padding:"4px 14px",fontSize:11,fontWeight:700,cursor:"pointer",letterSpacing:"0.5px"}}>+ 추가</button>}
+        {alarms.length<3&&<button onClick={()=>setAlarms(p=>[...p,EMPTY_ALARM()])} style={{background:DS.green,color:"#000",border:"none",borderRadius:9999,padding:"4px 14px",fontSize:11,fontWeight:700,cursor:"pointer"}}>+ 추가</button>}
       </div>
       {alarms.length===0&&<div style={{fontSize:12,color:DS.border,textAlign:"center",padding:"6px 0"}}>알람 없음</div>}
       {alarms.map((a,i)=>(
@@ -166,12 +129,12 @@ function AlarmSection({alarms,setAlarms}){
           <div style={{display:"flex",gap:4,alignItems:"center",marginBottom:8}}>
             {[{k:"days",l:"일"},{k:"hours",l:"시간"},{k:"mins",l:"분"}].map(f=>(
               <div key={f.k} style={{display:"flex",alignItems:"center",gap:3,flex:1}}>
-                <input type="text" inputMode="numeric" value={drafts[i]?.[f.k]??String(a[f.k])} onChange={e=>chg(i,f.k,e.target.value)} onBlur={e=>blur(i,f.k,e.target.value)} style={{...inputSt,padding:"7px 4px",fontSize:14,fontWeight:700,textAlign:"center"}}/>
+                <input type="number" min={0} value={a[f.k]||0} onChange={e=>upd(i,{[f.k]:Math.max(0,parseInt(e.target.value)||0)})} style={{...inputSt,padding:"7px 4px",fontSize:14,fontWeight:700,textAlign:"center"}}/>
                 <span style={{fontSize:11,color:DS.silver,whiteSpace:"nowrap"}}>{f.l}</span>
               </div>
             ))}
             <span style={{fontSize:11,color:DS.border,whiteSpace:"nowrap",marginLeft:2}}>전</span>
-            <button onClick={()=>{setAlarms(p=>{const a=[...p];a.splice(i,1);return a;});setDrafts(p=>{const d=[...p];d.splice(i,1);return d;});}} style={{background:"none",border:"none",color:DS.border,cursor:"pointer",fontSize:18,lineHeight:1,padding:"0 2px",flexShrink:0}}>×</button>
+            <button onClick={()=>setAlarms(p=>{const a=[...p];a.splice(i,1);return a;})} style={{background:"none",border:"none",color:DS.border,cursor:"pointer",fontSize:18,lineHeight:1,padding:"0 2px",flexShrink:0}}>×</button>
           </div>
           <div style={{display:"flex",gap:6}}>
             {[{v:"normal",l:"🔔 기본"},{v:"escalate",l:"📢 점점 크게"}].map(s=>(
@@ -184,113 +147,65 @@ function AlarmSection({alarms,setAlarms}){
   );
 }
 
-function SchedForm({val,onChange}){
-  const alarms=val.alarms||[];
-  const setAlarms=fn=>onChange({alarms:typeof fn==="function"?fn(alarms):fn});
-  return(
-    <div style={{background:DS.surfaceHigh,borderRadius:12,padding:"12px",marginBottom:10}}>
-      <div style={{display:"flex",gap:8,marginBottom:10}}>
-        {[{v:false,l:"⏰ 시간 지정"},{v:true,l:"☀️ 종일&기간"}].map(btn=>(
-          <button key={btn.l} onClick={()=>onChange({allDay:btn.v,time:(!btn.v&&val.date===todayStr())?nowTime():"09:00"})} style={{flex:1,border:`1.5px solid ${val.allDay===btn.v?DS.green:DS.border}`,borderRadius:9999,padding:"8px",fontSize:12,fontWeight:700,cursor:"pointer",background:val.allDay===btn.v?"rgba(30,215,96,0.15)":"transparent",color:val.allDay===btn.v?DS.green:DS.silver}}>{btn.l}</button>
-        ))}
-      </div>
-      <div style={{display:"flex",gap:8,marginBottom:8}}>
-        <div style={{flex:1}}>
-          <Label>시작 날짜</Label>
-          <input type="date" value={val.date} onChange={e=>{const ds=e.target.value;onChange({date:ds,time:!val.allDay?(ds===todayStr()?nowTime():"09:00"):val.time});}} style={inputSt}/>
-        </div>
-        {!val.allDay&&(
-          <div style={{flex:1}}>
-            <Label>시간</Label>
-            <div style={{display:"flex",gap:4}}>
-              <select value={(val.time||"00:00").split(":")[0]} onChange={e=>onChange({time:`${e.target.value}:00`})} style={selectSt}>
-                {Array.from({length:24},(_,h)=>String(h).padStart(2,"0")).map(h=><option key={h} value={h}>{h}시</option>)}
-              </select>
-              {(()=>{
-                const nowH=String(new Date().getHours()).padStart(2,"0");
-                const nowM=String(new Date().getMinutes()).padStart(2,"0");
-                const curH=(val.time||"00:00").split(":")[0];
-                const curM=(val.time||"00:00").split(":")[1];
-                const isNowHour=curH===nowH;
-                const mins=isNowHour?[nowM,...Array.from({length:12},(_,i)=>String(i*5).padStart(2,"0")).filter(m=>m!==nowM)]:Array.from({length:12},(_,i)=>String(i*5).padStart(2,"0"));
-                const safeM=mins.includes(curM)?curM:mins[0];
-                return(<select value={safeM} onChange={e=>onChange({time:`${curH}:${e.target.value}`})} style={selectSt}>{mins.map(m=><option key={m} value={m}>{m}분{m===nowM&&isNowHour?" ●":""}</option>)}</select>);
-              })()}
-            </div>
-          </div>
-        )}
-      </div>
-      {val.allDay&&<div style={{marginBottom:8}}><Label>종료 날짜</Label><input type="date" value={val.endDate} onChange={e=>onChange({endDate:e.target.value})} style={inputSt}/></div>}
-      <div style={{marginBottom:10}}>
-        <Label>🔁 반복</Label>
-        <div style={{display:"flex",gap:6,alignItems:"center"}}>
-          <select value={val.repeat||"none"} onChange={e=>onChange({repeat:e.target.value,repeatVal:1})} style={{...selectSt,flex:1}}>
-            {REPEAT_UNITS.map(u=><option key={u.v} value={u.v}>{u.l}</option>)}
-          </select>
-          {val.repeat&&val.repeat!=="none"&&(
-            <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
-              <input type="number" min={1} max={999} value={val.repeatVal||1} onChange={e=>onChange({repeatVal:Math.max(1,parseInt(e.target.value)||1)})} style={{...inputSt,width:52,padding:"6px 4px",fontSize:13,fontWeight:700,textAlign:"center"}}/>
-              <span style={{fontSize:11,color:DS.silver,whiteSpace:"nowrap"}}>{REPEAT_UNITS.find(u=>u.v===val.repeat)?.l||""} 마다</span>
-            </div>
-          )}
-        </div>
-      </div>
-      <AlarmSection alarms={alarms} setAlarms={setAlarms}/>
-    </div>
-  );
-}
-
 function SchedSub({form,setForm}){
-  const setAlarms=fn=>setForm(p=>({...p,alarms:typeof fn==="function"?fn(p.alarms):fn}));
+  const setAlarms=fn=>{
+    const next=typeof fn==="function"?fn(form.alarms||[]):fn;
+    setForm({alarms:next});
+  };
+  const mode=form._schedMode||"time";
+  const setMode=m=>{
+    if(m==="time") setForm({_schedMode:"time",allDay:false,endDate:"",time:form.date===todayStr()?nowTime():"09:00"});
+    if(m==="allday") setForm({_schedMode:"allday",allDay:true,endDate:"",time:"23:59"});
+    if(m==="period") setForm({_schedMode:"period",allDay:true,time:""});
+  };
+  const curH=(form.time||"09:00").split(":")[0];
+  const curM=(form.time||"09:00").split(":")[1]||"00";
   return(
     <div style={{background:DS.surfaceHigh,borderRadius:12,padding:"12px",marginBottom:10}}>
-      <div style={{display:"flex",gap:8,marginBottom:10}}>
-        {[{v:false,l:"⏰ 시간"},{v:true,l:"☀️ 종일&기간"}].map(btn=>(
-          <button key={btn.l} onClick={()=>setForm(p=>({...p,allDay:btn.v,time:!btn.v?(p.date===todayStr()?nowTime():"09:00"):p.time}))} style={{flex:1,border:`1.5px solid ${form.allDay===btn.v?DS.green:DS.border}`,borderRadius:9999,padding:"8px",fontSize:12,fontWeight:700,cursor:"pointer",background:form.allDay===btn.v?"rgba(30,215,96,0.15)":"transparent",color:form.allDay===btn.v?DS.green:DS.silver}}>{btn.l}</button>
+      <div style={{display:"flex",gap:6,marginBottom:12}}>
+        {[{v:"time",l:"⏰ 시간지정"},{v:"allday",l:"☀️ 종일"},{v:"period",l:"📅 기간"}].map(btn=>(
+          <button key={btn.v} onClick={()=>setMode(btn.v)} style={{flex:1,border:`1.5px solid ${mode===btn.v?DS.green:DS.border}`,borderRadius:9999,padding:"8px 4px",fontSize:11,fontWeight:700,cursor:"pointer",background:mode===btn.v?"rgba(30,215,96,0.15)":"transparent",color:mode===btn.v?DS.green:DS.silver}}>{btn.l}</button>
         ))}
       </div>
-      <div style={{display:"flex",gap:8,marginBottom:8}}>
-        <div style={{flex:1}}>
-          <Label>날짜</Label>
-          <input type="date" value={form.date} onChange={e=>{const ds=e.target.value;setForm(p=>({...p,date:ds,time:!p.allDay?(ds===todayStr()?nowTime():"09:00"):p.time}));}} style={inputSt}/>
-        </div>
-        {!form.allDay&&(
+      {mode==="time"&&(
+        <div style={{display:"flex",gap:8,marginBottom:8}}>
+          <div style={{flex:1}}>
+            <Label>날짜</Label>
+            <input type="date" value={form.date} onChange={e=>setForm({date:e.target.value})} style={inputSt}/>
+          </div>
           <div style={{flex:1}}>
             <Label>시간</Label>
             <div style={{display:"flex",gap:4}}>
-              <select value={(form.time||"00:00").split(":")[0]} onChange={e=>setForm(p=>({...p,time:`${e.target.value}:00`}))} style={selectSt}>
+              <select value={curH} onChange={e=>setForm({time:`${e.target.value}:${curM}`})} style={selectSt}>
                 {Array.from({length:24},(_,h)=>String(h).padStart(2,"0")).map(h=><option key={h} value={h}>{h}시</option>)}
               </select>
-              {(()=>{
-                const nowH=String(new Date().getHours()).padStart(2,"0");
-                const nowM=String(new Date().getMinutes()).padStart(2,"0");
-                const curH=(form.time||"00:00").split(":")[0];
-                const curM=(form.time||"00:00").split(":")[1];
-                const isNowHour=curH===nowH;
-                const mins=isNowHour?[nowM,...Array.from({length:12},(_,i)=>String(i*5).padStart(2,"0")).filter(m=>m!==nowM)]:Array.from({length:12},(_,i)=>String(i*5).padStart(2,"0"));
-                const safeM=mins.includes(curM)?curM:mins[0];
-                return(<select value={safeM} onChange={e=>setForm(p=>({...p,time:`${curH}:${e.target.value}`}))} style={selectSt}>{mins.map(m=><option key={m} value={m}>{m}분{m===nowM&&isNowHour?" ●":""}</option>)}</select>);
-              })()}
+              <select value={curM} onChange={e=>setForm({time:`${curH}:${e.target.value}`})} style={selectSt}>
+                {Array.from({length:12},(_,i)=>String(i*5).padStart(2,"0")).map(m=><option key={m} value={m}>{m}분</option>)}
+              </select>
             </div>
           </div>
-        )}
-      </div>
-      {form.allDay&&<div style={{marginBottom:8}}><Label>종료 날짜</Label><input type="date" value={form.endDate} onChange={e=>setForm(p=>({...p,endDate:e.target.value}))} style={inputSt}/></div>}
+        </div>
+      )}
+      {mode==="allday"&&(
+        <div style={{marginBottom:8}}>
+          <Label>날짜</Label>
+          <input type="date" value={form.date} onChange={e=>setForm({date:e.target.value,time:"23:59"})} style={inputSt}/>
+          <div style={{fontSize:11,color:DS.silver,marginTop:6}}>☀️ 해당일 24:00까지 자동 설정돼요</div>
+        </div>
+      )}
+      {mode==="period"&&(
+        <div style={{display:"flex",gap:8,marginBottom:8}}>
+          <div style={{flex:1}}><Label>시작 날짜</Label><input type="date" value={form.date} onChange={e=>setForm({date:e.target.value})} style={inputSt}/></div>
+          <div style={{flex:1}}><Label>종료 날짜</Label><input type="date" value={form.endDate||""} onChange={e=>setForm({endDate:e.target.value})} style={inputSt}/></div>
+        </div>
+      )}
       <div style={{marginBottom:10}}>
         <Label>🔁 반복</Label>
-        <div style={{display:"flex",gap:6,alignItems:"center"}}>
-          <select value={form.repeat||"none"} onChange={e=>setForm(p=>({...p,repeat:e.target.value,repeatVal:1}))} style={{...selectSt,flex:1}}>
-            {REPEAT_UNITS.map(u=><option key={u.v} value={u.v}>{u.l}</option>)}
-          </select>
-          {form.repeat&&form.repeat!=="none"&&(
-            <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
-              <input type="number" min={1} max={999} value={form.repeatVal||1} onChange={e=>setForm(p=>({...p,repeatVal:Math.max(1,parseInt(e.target.value)||1)}))} style={{...inputSt,width:52,padding:"6px 4px",fontSize:13,fontWeight:700,textAlign:"center"}}/>
-              <span style={{fontSize:11,color:DS.silver,whiteSpace:"nowrap"}}>{REPEAT_UNITS.find(u=>u.v===form.repeat)?.l||""} 마다</span>
-            </div>
-          )}
-        </div>
+        <select value={form.repeat||"none"} onChange={e=>setForm({repeat:e.target.value,repeatVal:1})} style={selectSt}>
+          {REPEAT_UNITS.map(u=><option key={u.v} value={u.v}>{u.l}</option>)}
+        </select>
       </div>
-      <AlarmSection alarms={form.alarms} setAlarms={setAlarms}/>
+      <AlarmSection alarms={form.alarms||[]} setAlarms={setAlarms}/>
     </div>
   );
 }
@@ -304,12 +219,12 @@ function EditModal({item,onSave,onClose}){
           <div style={{fontSize:16,fontWeight:700,color:DS.white}}>{form.type==="event"?"✏️ 일정 수정":"✏️ 할일 수정"}</div>
           <button onClick={onClose} style={{background:DS.surfaceMid,border:"none",borderRadius:"50%",width:32,height:32,cursor:"pointer",fontSize:16,color:DS.silver,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
         </div>
-        <div style={{marginBottom:12}}><Label>제목</Label><input value={form.title} onChange={e=>setForm(p=>({...p,title:e.target.value,hasMeeting:isMeeting(e.target.value)?true:p.hasMeeting}))} style={inputSt}/></div>
+        <div style={{marginBottom:12}}><Label>제목</Label><input value={form.title} onChange={e=>setForm(p=>({...p,title:e.target.value}))} style={inputSt}/></div>
         <div style={{marginBottom:12}}><Label>📝 메모</Label><textarea value={form.memo||""} onChange={e=>setForm(p=>({...p,memo:e.target.value}))} placeholder="간단한 메모..." style={{...textareaSt,height:64}}/></div>
         {form.type==="todo"&&(
           <div style={{marginBottom:12}}>
             <Label>우선순위</Label>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
               {PRIORITIES.map(pr=>(
                 <button key={pr.id} onClick={()=>setForm(p=>({...p,priority:pr.id}))} style={{border:`1.5px solid ${form.priority===pr.id?pr.color:DS.border}`,borderRadius:10,padding:"8px 4px",cursor:"pointer",background:form.priority===pr.id?pr.bg:DS.surfaceHigh,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
                   <div style={{width:10,height:10,borderRadius:3,background:pr.color}}/><div style={{fontSize:12,fontWeight:700,color:form.priority===pr.id?pr.color:DS.silver}}>{pr.id}</div><div style={{fontSize:10,color:form.priority===pr.id?pr.color:DS.border}}>{pr.desc}</div>
@@ -318,7 +233,7 @@ function EditModal({item,onSave,onClose}){
             </div>
           </div>
         )}
-        {form.type==="event"&&<SchedSub form={form} setForm={setForm}/>}
+        {form.type==="event"&&<SchedSub form={form} setForm={patch=>setForm(p=>({...p,...patch}))}/>}
         {form.type==="todo"&&(
           <>
             <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",marginBottom:form.date?10:12}}>
@@ -327,7 +242,7 @@ function EditModal({item,onSave,onClose}){
               </div>
               <span style={{fontSize:13,fontWeight:600,color:DS.white}}>📅 일정 & 알람</span>
             </label>
-            {form.date&&<SchedSub form={form} setForm={setForm}/>}
+            {form.date&&<SchedSub form={form} setForm={patch=>setForm(p=>({...p,...patch}))}/>}
           </>
         )}
         <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",marginBottom:form.hasMeeting?10:12}}>
@@ -335,7 +250,6 @@ function EditModal({item,onSave,onClose}){
             <div style={{position:"absolute",top:3,left:form.hasMeeting?20:3,width:18,height:18,borderRadius:"50%",background:DS.white,transition:"left 0.2s",boxShadow:"0 1px 3px rgba(0,0,0,0.4)"}}/>
           </div>
           <span style={{fontSize:13,fontWeight:600,color:DS.white}}>📍 미팅·약속 장소</span>
-          {isMeeting(form.title)&&<span style={{fontSize:10,background:"rgba(83,157,245,0.15)",color:DS.info,borderRadius:9999,padding:"2px 8px",fontWeight:700}}>자동감지</span>}
         </label>
         {form.hasMeeting&&(
           <div style={{background:"rgba(83,157,245,0.08)",borderRadius:12,padding:"12px",marginBottom:12,border:`1px solid rgba(83,157,245,0.3)`}}>
@@ -351,12 +265,10 @@ function EditModal({item,onSave,onClose}){
 
 function App(){
   const today=new Date();
-  const [items,setItems]=useState(INIT);
-  const [dbReady,setDbReady]=useState(false);
-  const [syncing,setSyncing]=useState(true);
+  const [items,setItems]=useState(()=>{try{const s=localStorage.getItem("scheduler_items_v2");return s?JSON.parse(s):INIT;}catch(e){return INIT;}});
   const [view,setView]=useState("dashboard");
   const [calMonth,setCalMonth]=useState(new Date(today.getFullYear(),today.getMonth(),1));
-  const [selectedDay,setSelectedDay]=useState(today.getDate());
+  const [selectedDay,setSelectedDay]=useState(null);
   const [aiResp,setAiResp]=useState("");
   const [aiLoad,setAiLoad]=useState(false);
   const [chatIn,setChatIn]=useState("");
@@ -367,35 +279,84 @@ function App(){
   const [memoText,setMemoText]=useState("");
   const [todoDateOffset,setTodoDateOffset]=useState(0);
   const [calExpanded,setCalExpanded]=useState(false);
+  const [openPri,setOpenPri]=useState(null);
+  const [slogan,setSlogan]=useState(()=>localStorage.getItem("my_slogan")||"오늘도 최선을 다하자!");
+  const [sloganEdit,setSloganEdit]=useState(false);
   const [ctxMenu,setCtxMenu]=useState(null);
   const [clipboard,setClipboard]=useState(null);
   const ctxMenuRef=useRef(null);
-  const calTouchX=useRef(null);
-  const todoTouchX=useRef(null);
   const [dragItem,setDragItem]=useState(null);
   const [dragOverDay,setDragOverDay]=useState(null);
 
-  // Firestore 실시간 동기화
-  useEffect(()=>{
-    const unsub=db.collection("scheduler").doc("items").onSnapshot(snap=>{
-      if(snap.exists){const data=snap.data().list;if(data)setItems(data);}
-      else{db.collection("scheduler").doc("items").set({list:INIT});}
-      setDbReady(true);setSyncing(false);
-    },err=>{
-      console.warn("Firestore 오류, localStorage 사용:",err);
-      try{const s=localStorage.getItem("scheduler_items");if(s)setItems(JSON.parse(s));}catch(e){}
-      setDbReady(true);setSyncing(false);
-    });
-    return()=>unsub();
-  },[]);
+  useEffect(()=>{try{localStorage.setItem("scheduler_items_v2",JSON.stringify(items));}catch(e){}}, [items]);
 
-  // items 변경시 Firestore 저장
+  // 앱 로드 시 AI 자동 요약
+  const autoSummarized=useRef(false);
   useEffect(()=>{
-    if(!dbReady)return;
-    db.collection("scheduler").doc("items").set({list:items}).catch(()=>{
-      try{localStorage.setItem("scheduler_items",JSON.stringify(items));}catch(e){}
-    });
-  },[items,dbReady]);
+    const timer=setTimeout(()=>{
+      const ds=todayStr();
+      const te=itemsRef.current.filter(i=>coversDate(i,ds));
+      const pt=itemsRef.current.filter(i=>i.type==="todo"&&!i.done);
+      const abCount=pt.filter(t=>t.priority?.startsWith("A")||t.priority?.startsWith("B")).length;
+      const lines=[];
+      if(te.length>0) lines.push(`• 오늘 일정 ${te.length}개 있음`);
+      if(pt.length>0) lines.push(`• 미완료 할일 ${pt.length}개 (긴급·중요 ${abCount}개)`);
+      const topTodo=[...pt].sort((a,b)=>(a.priority||"").localeCompare(b.priority||""))[0];
+      if(topTodo) lines.push(`• 최우선: [${topTodo.priority}] ${topTodo.title}`);
+      if(pt.length===0&&te.length===0) lines.push("• 오늘은 여유로운 날!");
+      setAiResp(lines.join("\n"));
+    },600);
+    return()=>clearTimeout(timer);
+  },[]);
+  const itemsRef=useRef(items);
+  useEffect(()=>{itemsRef.current=items;},[items]);
+
+  useEffect(()=>{
+    // 알림 권한 요청
+    if(Notification.permission==="default") Notification.requestPermission();
+
+    const check=()=>{
+      if(Notification.permission!=="granted") return;
+      const now=new Date();
+      itemsRef.current.forEach(item=>{
+        if(!item.date||item.done) return;
+        const timeStr=item.time||"00:00";
+        const itemDt=new Date(`${item.date}T${timeStr}:00`);
+        (item.alarms||[]).forEach((alarm,ai)=>{
+          const totalMins=(alarm.days||0)*1440+(alarm.hours||0)*60+(alarm.mins||0);
+          const triggerTime=new Date(itemDt.getTime()-totalMins*60*1000);
+          const diffMs=now-triggerTime;
+          // 트리거 시각 기준 ±90초 이내
+          if(diffMs>=-90000&&diffMs<=90000){
+            const key=`${item.id}-${ai}-${triggerTime.toISOString().slice(0,16)}`;
+            if(!_firedAlarms.has(key)){
+              _firedAlarms.add(key);
+              const label=totalMins===0?"지금":totalMins<60?`${totalMins}분 전 알림`:`${Math.floor(totalMins/60)}시간 ${totalMins%60?totalMins%60+"분 ":""}전 알림`;
+              new Notification(`⏰ ${item.title}`,{
+                body:`${label}\n${item.date} ${item.time||""}${item.location?" · 📍"+item.location:""}`,
+                icon:"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⏰</text></svg>",
+                requireInteraction:true,
+                tag:key,
+              });
+              if(alarm.sound==="escalate"){
+                setTimeout(()=>{
+                  new Notification(`🔔🔔 ${item.title}`,{
+                    body:"다시 알림 (점점 크게)",
+                    icon:"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔔</text></svg>",
+                    tag:key+"-2",
+                  });
+                },30000);
+              }
+            }
+          }
+        });
+      });
+    };
+
+    check();
+    const id=setInterval(check,60000); // 정확히 1분마다
+    return()=>clearInterval(id);
+  },[]); // 마운트 시 1회만 등록
 
   const year=calMonth.getFullYear(),month=calMonth.getMonth();
   const firstDay=new Date(year,month,1).getDay();
@@ -406,13 +367,9 @@ function App(){
   const todoViewDs=toDateStr(todoViewDate);
   const todoViewLabel=todoDateOffset===0?"오늘":todoDateOffset===1?"내일":todoDateOffset===-1?"어제":`${todoViewDate.getMonth()+1}/${todoViewDate.getDate()}`;
 
-  const onSelectDay=d=>{setSelectedDay(d);const ds=`${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;setEvForm(p=>({...p,...EMPTY_SCHED(ds),title:p.title}));};
-  const prevMonth=()=>{setCalMonth(new Date(year,month-1,1));setSelectedDay(1);};
-  const nextMonth=()=>{setCalMonth(new Date(year,month+1,1));setSelectedDay(1);};
-  const onCalTS=e=>{calTouchX.current=e.touches[0].clientX;};
-  const onCalTE=e=>{const dx=e.changedTouches[0].clientX-calTouchX.current;if(dx<-50)nextMonth();else if(dx>50)prevMonth();};
-  const onTodoTS=e=>{todoTouchX.current=e.touches[0].clientX;};
-  const onTodoTE=e=>{const dx=e.changedTouches[0].clientX-todoTouchX.current;if(dx<-50)setTodoDateOffset(p=>p+1);else if(dx>50)setTodoDateOffset(p=>p-1);};
+  const onSelectDay=d=>{setSelectedDay(d);};
+  const prevMonth=()=>{setCalMonth(new Date(year,month-1,1));setSelectedDay(null);};
+  const nextMonth=()=>{setCalMonth(new Date(year,month+1,1));setSelectedDay(null);};
 
   const openCtxMenu=(e,item)=>{e.preventDefault();e.stopPropagation();setCtxMenu({item,x:e.clientX,y:e.clientY});};
   const closeCtxMenu=()=>setCtxMenu(null);
@@ -422,14 +379,6 @@ function App(){
   const ctxCopy=()=>{if(!ctxMenu?.item)return;setClipboard({item:{...ctxMenu.item},mode:"copy"});closeCtxMenu();};
   const ctxPaste=()=>{if(!clipboard)return;setItems(p=>[...p,{...clipboard.item,id:Date.now(),date:selDs}]);setClipboard(prev=>prev.mode==="cut"?null:{...prev});closeCtxMenu();};
   const ctxDuplicate=()=>{if(!ctxMenu?.item)return;setItems(p=>[...p,{...ctxMenu.item,id:Date.now()}]);closeCtxMenu();};
-  const pasteClipboard=useCallback(()=>{if(!clipboard)return;setItems(p=>[...p,{...clipboard.item,id:Date.now(),date:selDs}]);if(clipboard.mode==="cut")setClipboard(null);},[clipboard,selDs]);
-
-  useEffect(()=>{
-    const h=e=>{const tag=document.activeElement?.tagName;if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT")return;const ctrl=e.metaKey||e.ctrlKey;if(!ctrl)return;if(e.key==="v"||e.key==="V"){e.preventDefault();pasteClipboard();return;}if(!ctxMenu)return;if(e.key==="x"||e.key==="X"){e.preventDefault();ctxCut();}else if(e.key==="c"||e.key==="C"){e.preventDefault();ctxCopy();}else if(e.key==="d"||e.key==="D"){e.preventDefault();ctxDuplicate();}};
-    const dh=e=>{const tag=document.activeElement?.tagName;if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT")return;if((e.key==="Delete"||e.key==="Backspace")&&ctxMenu){e.preventDefault();ctxDelete();}};
-    window.addEventListener("keydown",h);window.addEventListener("keydown",dh);
-    return()=>{window.removeEventListener("keydown",h);window.removeEventListener("keydown",dh);};
-  },[ctxMenu,pasteClipboard]);
 
   useEffect(()=>{
     const h=e=>{if(ctxMenuRef.current&&!ctxMenuRef.current.contains(e.target))closeCtxMenu();};
@@ -441,11 +390,46 @@ function App(){
   const updateItem=(id,patch)=>setItems(p=>p.map(i=>i.id===id?{...i,...patch}:i));
   const saveEdit=form=>{setItems(p=>p.map(i=>i.id===form.id?{...i,...form}:i));setEditModal(null);};
   const saveMemo=()=>{updateItem(memoOpen,{memo:memoText});setMemoOpen(null);};
-  const deletePastEvents=()=>{const c=items.filter(i=>i.type==="event"&&isPastEvent(i)).length;if(c===0){alert("삭제할 지난 일정이 없음");return;}if(window.confirm(`지난 일정 ${c}개를 삭제할까요?`))setItems(p=>p.filter(i=>!(i.type==="event"&&isPastEvent(i))));};
-  const addEvent=()=>{if(!evForm.title.trim())return;const ds=evForm.date||selDs;setItems(p=>[...p,{id:Date.now(),type:"event",title:evForm.title,date:ds,endDate:evForm.endDate,time:evForm.allDay?"":evForm.time,allDay:evForm.allDay,alarms:evForm.alarms||[],done:false,priority:"",hasMeeting:isMeeting(evForm.title)||evForm.hasMeeting,location:evForm.location||"",locationMemo:evForm.locationMemo||"",memo:evForm.memo||""}]);setEvForm({title:"",...EMPTY_SCHED(selDs),hasMeeting:false,location:"",locationMemo:"",memo:""});};
+  const addEvent=()=>{if(!evForm.title.trim())return;const ds=evForm.date||todayStr();setItems(p=>[...p,{id:Date.now(),type:"event",title:evForm.title,date:ds,endDate:evForm.endDate,time:evForm.allDay?"":evForm.time,allDay:evForm.allDay,alarms:evForm.alarms||[],done:false,priority:"",hasMeeting:isMeeting(evForm.title)||evForm.hasMeeting,location:evForm.location||"",locationMemo:evForm.locationMemo||"",memo:evForm.memo||""}]);setEvForm({title:"",...EMPTY_SCHED(todayStr()),hasMeeting:false,location:"",locationMemo:"",memo:""});};
   const addTodo=()=>{if(!tdForm.text.trim())return;const hasSched=tdForm.hasSchedule&&tdForm.date;setItems(p=>[...p,{id:Date.now(),type:"todo",title:tdForm.text,done:false,priority:tdForm.priority,date:hasSched?tdForm.date:"",endDate:hasSched?tdForm.endDate:"",time:hasSched&&!tdForm.allDay?tdForm.time:"",allDay:hasSched?tdForm.allDay:false,alarms:hasSched?(tdForm.alarms||[]):[],hasMeeting:isMeeting(tdForm.text)||tdForm.hasMeeting||false,location:tdForm.location||"",locationMemo:tdForm.locationMemo||"",memo:tdForm.memo||""}]);setTdForm({text:"",priority:"B1",hasSchedule:false,...EMPTY_SCHED(),hasMeeting:false,location:"",locationMemo:"",memo:""});};
-  const buildSummary=useCallback(()=>{const ds=todayStr();const te=items.filter(i=>coversDate(i,ds));const pt=items.filter(i=>i.type==="todo"&&!i.done);const dayLabel=["일","월","화","수","목","금","토"][today.getDay()];return `오늘 날짜: ${today.getFullYear()}년 ${today.getMonth()+1}월 ${today.getDate()}일 (${dayLabel}요일)\n\n오늘 일정:\n${te.map(e=>`- ${e.allDay?"종일":e.time} ${e.title}`).join("\n")||"없음"}\n\n미완료 할일:\n${pt.map(t=>`- [${t.priority}] ${t.title}`).join("\n")||"없음"}\n\n위 날짜 기준으로 핵심만 짧게 요약. '~임','~함' 체. bullet 5줄 이내.`;},[items]);
-  const askAI=useCallback(async(prompt)=>{const p=prompt||chatIn||buildSummary();setAiLoad(true);setAiResp("");try{const r=await fetch("/.netlify/functions/claude",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-5",max_tokens:1000,system:"친절한 AI 비서. 일정·할일 분석해 간결한 조언 한국어로 제공.",messages:[{role:"user",content:p}]})});const d=await r.json();setAiResp(d.content?.[0]?.text||"응답 없음");}catch(e){setAiResp("⚠️ AI 연결 오류");}setAiLoad(false);setChatIn("");},[chatIn,buildSummary]);
+
+  const buildSummary=useCallback(()=>{
+    const ds=todayStr();
+    const te=items.filter(i=>coversDate(i,ds));
+    const pt=items.filter(i=>i.type==="todo"&&!i.done);
+    const dayLabel=["일","월","화","수","목","금","토"][today.getDay()];
+    return `오늘 날짜: ${today.getFullYear()}년 ${today.getMonth()+1}월 ${today.getDate()}일 (${dayLabel}요일)\n\n오늘 일정:\n${te.map(e=>`- ${e.allDay?"종일":e.time} ${e.title}`).join("\n")||"없음"}\n\n미완료 할일:\n${pt.map(t=>`- [${t.priority}] ${t.title}`).join("\n")||"없음"}\n\n위 날짜 기준으로 핵심만 짧게 요약. '~임','~함' 체. bullet 5줄 이내.`;
+  },[items]);
+
+  const askAI=useCallback(async(prompt)=>{
+    const p=prompt||chatIn||buildSummary();
+    setAiLoad(true);setAiResp("");
+    try{
+      const r=await fetch("/.netlify/functions/claude",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"},
+        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:500,system:"친절한 AI 비서. 일정·할일 분석해 간결한 조언 한국어로. '~임','~함' 체. bullet 5줄 이내.",messages:[{role:"user",content:p}]})
+      });
+      const d=await r.json();
+      if(d.error) throw new Error(d.error.message);
+      setAiResp(d.content?.[0]?.text||"응답 없음");
+    }catch(e){
+      // API 키 없을 때 로컬 요약으로 대체
+      const ds=todayStr();
+      const te=items.filter(i=>coversDate(i,ds));
+      const pt=items.filter(i=>i.type==="todo"&&!i.done);
+      const abCount=pt.filter(t=>t.priority?.startsWith("A")||t.priority?.startsWith("B")).length;
+      const lines=[];
+      if(te.length>0) lines.push(`• 오늘 일정 ${te.length}개 있음`);
+      if(pt.length>0) lines.push(`• 미완료 할일 ${pt.length}개 (긴급·중요 ${abCount}개)`);
+      const topTodo=pt.sort((a,b)=>a.priority?.localeCompare(b.priority))[0];
+      if(topTodo) lines.push(`• 최우선: [${topTodo.priority}] ${topTodo.title}`);
+      if(pt.length===0&&te.length===0) lines.push("• 오늘은 여유로운 날!");
+      lines.push("• (AI 연결 없음 - 로컬 요약)");
+      setAiResp(lines.join("\n"));
+    }
+    setAiLoad(false);setChatIn("");
+  },[chatIn,buildSummary,items]);
 
   const todos=items.filter(i=>i.type==="todo");
   const eventsAll=items.filter(i=>i.type==="event");
@@ -454,7 +438,7 @@ function App(){
   const todayItems=sortByTime(items.filter(i=>coversDate(i,todayStr())));
   const getDayItems=d=>{const ds=`${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;return sortByTime(items.filter(i=>coversDate(i,ds)));};
   const selItems=sortByTime(items.filter(i=>coversDate(i,selDs)));
-  const navItems=[{id:"dashboard",icon:"🏠",label:"홈"},{id:"calendar",icon:"📅",label:"캘린더"},{id:"todo",icon:"✅",label:"할일"},{id:"ai",icon:"🤖",label:"AI"}];
+  const navItems=[{id:"dashboard",icon:"🏠",label:"홈"},{id:"todo",icon:"✅",label:"할일"},{id:"calendar",icon:"📅",label:"캘린더"}];
 
   const ItemRow=({item})=>{
     const p2=item.type==="todo"?getPri(item.priority):null;
@@ -471,6 +455,7 @@ function App(){
             <div style={{fontSize:14,fontWeight:600,color:item.done||past?DS.border:DS.white,textDecoration:item.done?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</div>
             <div style={{fontSize:11,color:DS.silver,marginTop:1,display:"flex",gap:6,alignItems:"center"}}>
               <span>{item.allDay?"☀️ 종일":item.time||"시간 없음"}{item.allDay&&item.endDate?` ~ ${item.endDate}`:""}</span>
+              {item.date&&<span style={{color:DS.border}}>{item.date.slice(5,7)}월 {item.date.slice(8,10)}일</span>}
               {p2&&<span style={{color:p2.color,fontWeight:700}}>{item.priority}</span>}
               {past&&<span style={{color:DS.warning,fontWeight:700,fontSize:10}}>지남</span>}
             </div>
@@ -479,7 +464,6 @@ function App(){
           </div>
           <div style={{display:"flex",gap:4,flexShrink:0}}>
             {(item.alarms||[]).length>0&&<span style={{background:"rgba(255,164,43,0.15)",borderRadius:9999,padding:"3px 8px",fontSize:10,color:DS.warning,fontWeight:700}}>🔔×{item.alarms.length}</span>}
-            {item.date&&<button onClick={()=>exportToCalendar(item)} title="기기 캘린더에 추가" style={{background:"rgba(30,215,96,0.12)",border:`1px solid rgba(30,215,96,0.3)`,borderRadius:9999,padding:"3px 8px",fontSize:10,cursor:"pointer",color:DS.green,fontWeight:700}}>📅+</button>}
             <button onClick={()=>{if(memoOpen===item.id){setMemoOpen(null);}else{setMemoOpen(item.id);setMemoText(item.memo||"");}}} style={{background:item.memo?"rgba(255,215,0,0.12)":"rgba(255,255,255,0.05)",border:`1px solid ${item.memo?"rgba(255,215,0,0.3)":"transparent"}`,borderRadius:9999,padding:"3px 8px",fontSize:10,cursor:"pointer",color:item.memo?"#ffd700":DS.silver,fontWeight:700}}>📝</button>
             <button onClick={()=>setEditModal(item)} style={{background:"rgba(255,255,255,0.05)",border:"none",borderRadius:9999,padding:"3px 8px",fontSize:11,cursor:"pointer",color:DS.silver}}>✏️</button>
             <button onClick={()=>deleteItem(item.id)} style={{background:"none",border:"none",color:DS.border,cursor:"pointer",fontSize:17,lineHeight:1,padding:"0 2px"}}>×</button>
@@ -506,80 +490,197 @@ function App(){
       {ctxMenu&&(
         <div ref={ctxMenuRef} style={{position:"fixed",left:Math.min(ctxMenu.x,window.innerWidth-175),top:Math.min(ctxMenu.y,window.innerHeight-240),zIndex:99999,background:DS.surfaceHigh,borderRadius:12,boxShadow:DS.shadowHeavy,padding:"6px",minWidth:165,border:`1px solid ${DS.border}`}}>
           {!ctxMenu.pasteOnly&&<div style={{fontSize:11,color:DS.silver,fontWeight:700,padding:"4px 10px 6px",borderBottom:`1px solid ${DS.border}`,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:150}}>{ctxMenu.item?.title}</div>}
-          {ctxMenu.pasteOnly?(
-            <button onClick={ctxPaste} style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",background:"none",border:"none",borderRadius:8,padding:"8px 10px",fontSize:13,fontWeight:600,color:DS.white,cursor:"pointer",gap:8}}>
-              <span>📌 붙여넣기</span><span style={{fontSize:10,color:DS.silver}}>Ctrl+V</span>
+          {[{label:"🗑 삭제",fn:ctxDelete,color:DS.negative},{label:"✂️ 오려두기",fn:ctxCut},{label:"📋 복사",fn:ctxCopy},{label:"📌 붙여넣기",fn:clipboard?ctxPaste:null,disabled:!clipboard},{label:"⧉ 복제",fn:ctxDuplicate}].map(({label,fn,color,disabled})=>(
+            <button key={label} onClick={fn||undefined} disabled={!!disabled} style={{display:"flex",alignItems:"center",width:"100%",background:"none",border:"none",borderRadius:8,padding:"8px 10px",fontSize:13,fontWeight:600,color:disabled?DS.border:color||DS.white,cursor:disabled?"not-allowed":"pointer",textAlign:"left"}}>
+              <span>{label}</span>
             </button>
-          ):(
-            [{label:"🗑 삭제",hint:"Del",fn:ctxDelete,color:DS.negative},{label:"✂️ 오려두기",hint:"Ctrl+X",fn:ctxCut},{label:"📋 복사",hint:"Ctrl+C",fn:ctxCopy},{label:"📌 붙여넣기",hint:"Ctrl+V",fn:clipboard?ctxPaste:null,disabled:!clipboard},{label:"⧉ 복제",hint:"Ctrl+D",fn:ctxDuplicate}].map(({label,hint,fn,color,disabled})=>(
-              <button key={label} onClick={fn||undefined} disabled={!!disabled} style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",background:"none",border:"none",borderRadius:8,padding:"8px 10px",fontSize:13,fontWeight:600,color:disabled?DS.border:color||DS.white,cursor:disabled?"not-allowed":"pointer",textAlign:"left",gap:8}}>
-                <span>{label}</span><span style={{fontSize:10,color:DS.silver,fontWeight:400,whiteSpace:"nowrap"}}>{hint}</span>
-              </button>
-            ))
-          )}
+          ))}
         </div>
       )}
 
       {/* Header */}
-      <div style={{background:DS.bg,padding:"16px 20px 12px",borderBottom:`1px solid rgba(255,255,255,0.08)`,position:"sticky",top:0,zIndex:100,backdropFilter:"blur(20px)"}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <div style={{background:DS.bg,padding:"14px 20px 12px",borderBottom:`1px solid rgba(255,255,255,0.08)`,position:"sticky",top:0,zIndex:100,backdropFilter:"blur(20px)"}}>
+        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
+          {/* 날짜 */}
           <div>
-            <div style={{fontSize:11,color:DS.silver,letterSpacing:"0.5px"}}>{today.getFullYear()}년 {today.getMonth()+1}월 {today.getDate()}일 {DAYS[today.getDay()]}요일</div>
-            <div style={{fontSize:20,fontWeight:700,color:DS.white,marginTop:2}}>{view==="dashboard"?"안녕하세요 👋":view==="calendar"?"📅 캘린더":view==="todo"?"✅ 할일 목록":"🤖 AI 비서"}</div>
+            <div style={{fontSize:26,fontWeight:800,color:DS.white,letterSpacing:"-0.5px",lineHeight:1.1}}>
+              {today.getMonth()+1}월 {today.getDate()}일 {DAYS[today.getDay()]}요일
+            </div>
+            <div style={{fontSize:13,color:DS.silver,marginTop:2}}>{today.getFullYear()}</div>
           </div>
-          <div style={{background:DS.surfaceMid,borderRadius:9999,padding:"6px 14px",fontSize:12,fontWeight:700,color:DS.silver,border:`1px solid ${DS.border}`}}>{syncing?<span style={{color:DS.warning}}>⏳ 동기화중</span>:<span>미완료 <span style={{color:DS.green}}>{pendingCount}</span></span>}</div>
+          {/* 구호 */}
+          <div style={{flex:1,minWidth:0,textAlign:"right"}}>
+            {sloganEdit?(
+              <div style={{display:"flex",gap:6,alignItems:"center",justifyContent:"flex-end"}}>
+                <input
+                  autoFocus
+                  value={slogan}
+                  onChange={e=>setSlogan(e.target.value)}
+                  onBlur={()=>{setSloganEdit(false);localStorage.setItem("my_slogan",slogan);}}
+                  onKeyDown={e=>{if(e.key==="Enter"){setSloganEdit(false);localStorage.setItem("my_slogan",slogan);}}}
+                  style={{...inputSt,fontSize:13,fontWeight:700,textAlign:"right",padding:"6px 10px",maxWidth:180,color:DS.green,background:"rgba(30,215,96,0.1)",border:`1px solid ${DS.green}`}}
+                />
+              </div>
+            ):(
+              <div onClick={()=>setSloganEdit(true)} style={{cursor:"pointer",padding:"4px 0"}}>
+                <div style={{fontSize:13,fontWeight:800,color:DS.green,lineHeight:1.4,textShadow:"0 0 20px rgba(30,215,96,0.4)",letterSpacing:"0.3px",wordBreak:"keep-all",textAlign:"right"}}>{slogan}</div>
+                <div style={{fontSize:10,color:DS.border,marginTop:2,textAlign:"right"}}>탭하여 수정</div>
+              </div>
+            )}
+          </div>
         </div>
+        {view!=="dashboard"&&<div style={{fontSize:12,fontWeight:700,color:DS.silver,marginTop:6}}>{view==="calendar"?"📅 캘린더":view==="todo"?"✅ 할일":""}</div>}
       </div>
 
       {/* Main Content */}
       <div style={{flex:1,overflowY:"auto",padding:"16px 16px 90px"}}>
 
-        {/* ── DASHBOARD ── */}
+        {/* DASHBOARD */}
         {view==="dashboard"&&(
           <div>
-            {/* Hero Card */}
             <div style={{background:`linear-gradient(135deg, #1a2a1a 0%, #181818 60%, #121212 100%)`,border:`1px solid rgba(30,215,96,0.2)`,borderRadius:18,padding:"20px",color:DS.white,marginBottom:14,boxShadow:DS.shadowHeavy}}>
-              <div style={{fontSize:11,color:DS.green,marginBottom:10,fontWeight:700,letterSpacing:"1.5px",textTransform:"uppercase"}}>오늘의 일정 & 할일</div>
-              {(()=>{const vis=todayItems.filter(i=>!(i.type==="event"&&isPastEvent(i)));return vis.length===0?<div style={{fontSize:13,color:DS.silver}}>오늘 항목 없음</div>:vis.map(item=>{const p2=item.type==="todo"?getPri(item.priority):null;return(
-                  <div key={item.id} style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:8}}>
-                    {p2&&<div style={{width:6,height:6,borderRadius:2,background:p2.color,flexShrink:0,marginTop:6}}/>}
-                    <div style={{background:"rgba(255,255,255,0.08)",borderRadius:9999,padding:"3px 10px",fontSize:11,fontWeight:700,flexShrink:0,color:DS.silver}}>{item.allDay?"종일":item.time}</div>
-                    <div style={{flex:1}}><div style={{fontSize:14,fontWeight:600,color:DS.white}}>{item.title}</div></div>
-                    {(item.alarms||[]).length>0&&<div style={{fontSize:12,color:DS.warning}}>🔔</div>}
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                <div style={{fontSize:16,color:DS.green,fontWeight:700,letterSpacing:"1px",textTransform:"uppercase"}}>오늘의 일정 & 할일</div>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <div style={{background:"rgba(30,215,96,0.15)",borderRadius:9999,padding:"4px 12px",fontSize:13,fontWeight:700,color:DS.green}}>미완료 {pendingCount}</div>
+                  <button onClick={()=>askAI(buildSummary())} disabled={aiLoad} style={{background:"transparent",border:`1px solid rgba(30,215,96,0.3)`,borderRadius:9999,padding:"4px 12px",fontSize:12,fontWeight:700,color:DS.green,cursor:"pointer"}}>{aiLoad?"…":"🔄"}</button>
+                </div>
+              </div>
+              {(()=>{
+                const todayDs=todayStr();
+                const events=sortByTime(items.filter(i=>i.type==="event"&&coversDate(i,todayDs)));
+                const pendingTodos=sortByTime(todos.filter(t=>!t.done));
+                const doneTodos=todos.filter(t=>t.done&&t.doneDate===todayDs);
+                const hasAnything=events.length>0||pendingTodos.length>0||doneTodos.length>0;
+                if(!hasAnything)return <div style={{fontSize:18,color:DS.silver}}>🎉 자유의 날!</div>;
+                return(
+                  <div>
+                    {/* 캘린더 일정 */}
+                    {events.length>0&&(
+                      <div style={{marginBottom:12}}>
+                        <div style={{fontSize:12,color:DS.info,fontWeight:700,letterSpacing:"1px",textTransform:"uppercase",marginBottom:8}}>📅 캘린더 일정</div>
+                        {events.map(item=>(
+                          <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:9,opacity:isPastEvent(item)?0.45:1}}>
+                            <div style={{background:"rgba(83,157,245,0.18)",borderRadius:6,padding:"3px 9px",fontSize:12,fontWeight:700,color:DS.info,flexShrink:0,minWidth:44,textAlign:"center"}}>{item.allDay?"종일":item.time}</div>
+                            <div style={{flex:1,fontSize:16,fontWeight:600,color:isPastEvent(item)?DS.border:DS.white,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</div>
+                            {isPastEvent(item)&&<span style={{fontSize:11,color:DS.warning,fontWeight:700,flexShrink:0}}>지남</span>}
+                            {item.hasMeeting&&item.location&&<span style={{fontSize:13,color:DS.info,flexShrink:0}}>📍</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {/* 구분선 */}
+                    {events.length>0&&(pendingTodos.length>0||doneTodos.length>0)&&<div style={{borderTop:"1px solid rgba(255,255,255,0.08)",marginBottom:12}}/>}
+                    {/* 미완료 할일 */}
+                    {pendingTodos.length>0&&(
+                      <div style={{marginBottom:doneTodos.length>0?12:0}}>
+                        <div style={{fontSize:12,color:DS.green,fontWeight:700,letterSpacing:"1px",textTransform:"uppercase",marginBottom:8}}>✅ 할일 ({pendingTodos.length})</div>
+                        {pendingTodos.map(item=>{const p2=getPri(item.priority);return(
+                          <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:9}}>
+                            <div style={{background:p2.color,borderRadius:6,padding:"3px 9px",fontSize:12,fontWeight:700,color:"#000",flexShrink:0,minWidth:36,textAlign:"center"}}>{item.priority}</div>
+                            <div style={{flex:1,fontSize:16,fontWeight:600,color:DS.white,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</div>
+                            {item.date&&<span style={{fontSize:12,color:DS.border,flexShrink:0}}>{item.date.slice(5,7)}/{item.date.slice(8,10)}</span>}
+                          </div>
+                        );})}
+                      </div>
+                    )}
+                    {/* 오늘 완료한 할일 */}
+                    {doneTodos.length>0&&(
+                      <div>
+                        <div style={{fontSize:12,color:DS.border,fontWeight:700,letterSpacing:"1px",textTransform:"uppercase",marginBottom:8}}>☑️ 오늘 완료 ({doneTodos.length})</div>
+                        {doneTodos.map(item=>(
+                          <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,opacity:0.5}}>
+                            <div style={{width:20,height:20,borderRadius:5,background:DS.green,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#000",fontWeight:700,flexShrink:0}}>✓</div>
+                            <div style={{flex:1,fontSize:15,color:DS.silver,textDecoration:"line-through",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                );});})()}            </div>
+                );
+              })()}
+              {(aiLoad||aiResp)&&<div style={{marginTop:14,paddingTop:14,borderTop:"1px solid rgba(30,215,96,0.15)"}}>
+                <div style={{fontSize:12,color:DS.green,fontWeight:700,letterSpacing:"1px",textTransform:"uppercase",marginBottom:8}}>🤖 AI 브리핑</div>
+                {aiLoad?<div style={{fontSize:15,color:DS.silver}}>⏳ 분석 중…</div>:<div style={{fontSize:15,color:DS.white,lineHeight:1.9,whiteSpace:"pre-wrap"}}>{aiResp}</div>}
+              </div>}
+            </div>
 
-            {/* Priority Summary */}
+            {/* 이번주 흐름 */}
             <div style={{...cardSt}}>
-              <div style={{fontSize:11,fontWeight:700,color:DS.silver,marginBottom:12,letterSpacing:"1px",textTransform:"uppercase"}}>우선순위별 할일</div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                {PRIORITIES.map(p=>{const cnt=todos.filter(t=>t.priority===p.id&&!t.done).length;return(
-                  <div key={p.id} style={{background:p.bg,border:`1px solid ${p.color}44`,borderRadius:9999,padding:"6px 14px",display:"flex",alignItems:"center",gap:6}}>
-                    <div style={{width:7,height:7,borderRadius:2,background:p.color}}/>
-                    <span style={{fontSize:12,fontWeight:700,color:p.color}}>{p.id}</span>
-                    <span style={{fontSize:14,fontWeight:700,color:DS.white}}>{cnt}</span>
-                  </div>
-                );})}
+              <div style={{fontSize:14,fontWeight:700,color:DS.silver,marginBottom:14,letterSpacing:"1px",textTransform:"uppercase"}}>📆 이번 주 흐름</div>
+              <div style={{display:"flex",gap:4}}>
+                {Array.from({length:7},(_,i)=>{
+                  const startOfWeek=new Date(today);
+                  startOfWeek.setDate(today.getDate()-today.getDay()+i);
+                  const ds=toDateStr(startOfWeek);
+                  const isToday=ds===todayStr();
+                  const dayItems=items.filter(item=>coversDate(item,ds)&&!(item.type==="todo"&&item.done));
+                  const dow=startOfWeek.getDay();
+                  return(
+                    <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+                      <div style={{fontSize:12,color:dow===0?DS.negative:dow===6?DS.info:DS.silver,fontWeight:700}}>{DAYS[dow]}</div>
+                      <div style={{fontSize:14,fontWeight:isToday?700:400,color:isToday?"#000":DS.white,background:isToday?DS.green:"transparent",width:30,height:30,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center"}}>{startOfWeek.getDate()}</div>
+                      <div style={{display:"flex",flexDirection:"column",gap:2,width:"100%"}}>
+                        {dayItems.slice(0,3).map((item,ei)=>{const p2=item.type==="todo"?getPri(item.priority):null;return(<div key={item.id} style={{height:5,borderRadius:2,background:p2?p2.color:EV_COLORS[ei%EV_COLORS.length],opacity:isToday?1:0.6}}/>);})}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
-            {/* AI Summary */}
-            <div style={{...cardSt}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-                <div style={{fontSize:11,fontWeight:700,color:DS.silver,letterSpacing:"1px",textTransform:"uppercase"}}>🤖 AI 한줄 요약</div>
-                <button onClick={()=>askAI(buildSummary())} disabled={aiLoad} style={{background:DS.surfaceMid,border:`1px solid ${DS.border}`,borderRadius:9999,padding:"4px 12px",fontSize:11,fontWeight:700,color:DS.silver,cursor:"pointer"}}>{aiLoad?"분석중…":"새로고침"}</button>
-              </div>
-              {aiLoad&&<div style={{fontSize:13,color:DS.silver,textAlign:"center",padding:"12px 0"}}>⏳ 분석 중…</div>}
-              {!aiLoad&&aiResp&&<div style={{fontSize:14,color:DS.white,lineHeight:1.9,whiteSpace:"pre-wrap"}}>{aiResp}</div>}
-              {!aiLoad&&!aiResp&&<button onClick={()=>askAI(buildSummary())} style={{background:DS.green,color:"#000",border:"none",borderRadius:9999,padding:"13px",width:"100%",fontSize:14,fontWeight:700,cursor:"pointer",letterSpacing:"0.5px"}}>오늘 요약 받기</button>}
-            </div>
+            {/* 우선순위 현황 */}
+            {(()=>{
+              const togglePri=id=>setOpenPri(p=>p===id?null:id);
+              return(
+                <div style={{...cardSt}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                    <div style={{fontSize:14,fontWeight:700,color:DS.silver,letterSpacing:"1px",textTransform:"uppercase"}}>우선순위 현황</div>
+                    <button onClick={()=>setView("todo")} style={{background:"rgba(30,215,96,0.12)",border:`1px solid rgba(30,215,96,0.3)`,borderRadius:9999,padding:"5px 14px",fontSize:13,fontWeight:700,color:DS.green,cursor:"pointer"}}>할일 추가 →</button>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:openPri?14:0}}>
+                    {PRIORITIES.map(p=>{
+                      const cnt=todos.filter(t=>t.priority===p.id&&!t.done).length;
+                      const isOpen=openPri===p.id;
+                      return(
+                        <button key={p.id} onClick={()=>togglePri(p.id)} style={{background:isOpen?p.bg:DS.surfaceHigh,border:`1.5px solid ${isOpen?p.color:DS.border}`,borderRadius:10,padding:"12px 4px 10px",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:5,transition:"all 0.15s"}}>
+                          <div style={{fontSize:15,fontWeight:700,color:p.color}}>{p.id}</div>
+                          <div style={{fontSize:11,color:isOpen?p.color:DS.border,letterSpacing:"0.3px"}}>{p.desc}</div>
+                          <div style={{background:cnt>0?p.color:"transparent",border:`1px solid ${cnt>0?p.color:DS.border}`,borderRadius:9999,minWidth:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:cnt>0?"#000":DS.border,paddingInline:6}}>{cnt}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {openPri&&(()=>{
+                    const p=getPri(openPri);
+                    const its=todos.filter(t=>t.priority===openPri&&!t.done);
+                    return(
+                      <div style={{background:p.bg,border:`1px solid ${p.color}33`,borderRadius:12,padding:"14px 16px"}}>
+                        <div style={{fontSize:13,fontWeight:700,color:p.color,letterSpacing:"1px",textTransform:"uppercase",marginBottom:its.length?12:0}}>{p.id} · {p.desc} ({its.length}개)</div>
+                        {its.length===0
+                          ?<div style={{fontSize:16,color:DS.border,textAlign:"center",padding:"10px 0"}}>✅ 모두 완료!</div>
+                          :its.map(t=>(
+                            <div key={t.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                              <button onClick={()=>toggleTodo(t.id)} style={{width:24,height:24,borderRadius:6,border:`2px solid ${p.color}`,background:"transparent",cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",color:"#000",fontSize:12}}></button>
+                              <div style={{flex:1,fontSize:16,fontWeight:600,color:DS.white,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</div>
+                              {t.date&&<span style={{fontSize:12,color:DS.border,flexShrink:0}}>{t.date.slice(5,7)}/{t.date.slice(8,10)}</span>}
+                              <button onClick={()=>setEditModal(t)} style={{background:"none",border:"none",fontSize:14,cursor:"pointer",color:DS.border,flexShrink:0}}>✏️</button>
+                            </div>
+                          ))
+                        }
+                      </div>
+                    );
+                  })()}
+                </div>
+              );
+            })()}
           </div>
         )}
 
-        {/* ── CALENDAR ── */}
+        {/* CALENDAR */}
         {view==="calendar"&&(
           <div>
-            <div onTouchStart={onCalTS} onTouchEnd={onCalTE} style={{...cardSt,userSelect:"none"}}>
+            <div style={{...cardSt,userSelect:"none"}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
                 <button onClick={prevMonth} style={{background:DS.surfaceMid,border:"none",borderRadius:"50%",width:34,height:34,cursor:"pointer",fontSize:16,color:DS.white,display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
                 <div style={{fontWeight:700,fontSize:16,color:DS.white}}>{year}년 {MONTHS[month]}</div>
@@ -589,7 +690,7 @@ function App(){
                 </div>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}>
-                {DAYS.map((d,i)=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:700,color:i===0?DS.negative:i===6?DS.info:DS.silver,padding:"4px 0",letterSpacing:"0.5px"}}>{d}</div>)}
+                {DAYS.map((d,i)=><div key={d} style={{textAlign:"center",fontSize:17,fontWeight:700,color:i===0?DS.negative:i===6?DS.info:DS.silver,padding:"4px 0"}}>{d}</div>)}
               </div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:"2px 1px"}}>
                 {cells.map((d,i)=>{
@@ -601,24 +702,19 @@ function App(){
                   const maxShow=calExpanded?7:2;
                   return(
                     <div key={i} onClick={()=>onSelectDay(d)}
-                      onContextMenu={e=>{e.preventDefault();e.stopPropagation();onSelectDay(d);if(clipboard)setCtxMenu({item:null,x:e.clientX,y:e.clientY,pasteOnly:true});}}
                       onDragOver={e=>{e.preventDefault();setDragOverDay(d);}}
                       onDragLeave={()=>setDragOverDay(null)}
                       onDrop={e=>{e.preventDefault();if(dragItem){const ds=`${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;updateItem(dragItem.id,{date:ds});setDragItem(null);setDragOverDay(null);onSelectDay(d);}}}
-                      style={{borderRadius:10,cursor:"pointer",background:dragOverDay===d?"rgba(30,215,96,0.25)":isSel?DS.green:isToday?DS.surfaceMid:"transparent",padding:isSel?"8px 4px":"5px 2px 4px",minHeight:calExpanded?100:56,display:"flex",flexDirection:"column",alignItems:"center",gap:2,transition:"all 0.25s",overflow:"hidden",minWidth:0,zIndex:isSel?20:1,boxShadow:isSel?DS.shadowHeavy:dragOverDay===d?`0 0 0 2px ${DS.green}`:"none",position:"relative",transform:isSel?"scale(1.35)":"scale(1)",transformOrigin:"center top",border:dragOverDay===d?`1.5px solid ${DS.green}`:"1.5px solid transparent"}}>
-                      <div style={{fontSize:isSel?14:13,fontWeight:isToday||isSel?700:400,color:isSel?"#000":dow===0?DS.negative:dow===6?DS.info:DS.white,lineHeight:1,marginBottom:2}}>{d}</div>
-                      <div style={{width:"100%",display:"flex",flexDirection:"column",gap:2,paddingLeft:2,paddingRight:2,boxSizing:"border-box",minWidth:0}}>
-                        {(isSel?dayItems:dayItems.slice(0,maxShow)).map((item,ei)=>{const p2=item.type==="todo"?getPri(item.priority):null;const bg=isSel?"rgba(0,0,0,0.25)":(p2?p2.color:EV_COLORS[ei%EV_COLORS.length]);return(
-                          <div key={item.id}
-                            draggable
-                            onDragStart={e=>{e.stopPropagation();setDragItem(item);e.dataTransfer.effectAllowed="move";}}
-                            onDragEnd={()=>{setDragItem(null);setDragOverDay(null);}}
-                            onContextMenu={e=>{e.preventDefault();e.stopPropagation();onSelectDay(d);openCtxMenu(e,item);}}
-                            style={{background:dragItem?.id===item.id?"rgba(30,215,96,0.5)":bg,borderRadius:3,padding:isSel?"2px 3px":"1px 2px",overflow:"hidden",whiteSpace:isSel?"normal":"nowrap",textOverflow:isSel?"clip":"ellipsis",fontSize:isSel?9:8,fontWeight:700,color:isSel?"rgba(0,0,0,0.85)":"#fff",lineHeight:1.4,width:"100%",boxSizing:"border-box",display:"block",wordBreak:isSel?"break-all":"normal",cursor:"grab",opacity:dragItem?.id===item.id?0.5:1}}>
+                      style={{borderRadius:10,cursor:"pointer",background:dragOverDay===d?"rgba(30,215,96,0.25)":isSel?DS.green:isToday?DS.surfaceMid:"transparent",padding:"6px 2px 5px",minHeight:calExpanded?100:68,display:"flex",flexDirection:"column",alignItems:"center",gap:2,transition:"all 0.2s",overflow:"hidden",minWidth:0,position:"relative",border:isSel?`1.5px solid ${DS.green}`:"1.5px solid transparent"}}>
+                      <div style={{fontSize:20,fontWeight:isToday||isSel?700:400,color:isSel?"#000":dow===0?DS.negative:dow===6?DS.info:DS.white,lineHeight:1,marginBottom:3}}>{d}</div>
+                      <div style={{width:"100%",display:"flex",flexDirection:"column",gap:1,paddingLeft:1,paddingRight:1,boxSizing:"border-box",minWidth:0}}>
+                        {dayItems.slice(0,maxShow).map((item,ei)=>{const p2=item.type==="todo"?getPri(item.priority):null;const bg=isSel?"rgba(0,0,0,0.25)":(p2?p2.color:EV_COLORS[ei%EV_COLORS.length]);return(
+                          <div key={item.id} draggable onDragStart={e=>{e.stopPropagation();setDragItem(item);}} onDragEnd={()=>{setDragItem(null);setDragOverDay(null);}}
+                            style={{background:bg,borderRadius:3,padding:"1px 2px",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",fontSize:9,fontWeight:700,color:"#fff",lineHeight:1.6,width:"100%",boxSizing:"border-box",display:"block",cursor:"grab"}}>
                             {item.allDay?"☀":item.time?.slice(0,5)} {item.title}
                           </div>
                         );})}
-                        {!isSel&&dayItems.length>maxShow&&<div style={{fontSize:8,color:isSel?"rgba(0,0,0,0.6)":DS.silver,paddingLeft:2}}>+{dayItems.length-maxShow}</div>}
+                        {dayItems.length>maxShow&&<div style={{fontSize:9,color:DS.silver,paddingLeft:2}}>+{dayItems.length-maxShow}</div>}
                       </div>
                     </div>
                   );
@@ -626,43 +722,47 @@ function App(){
               </div>
             </div>
 
-            {/* Selected Day Events */}
-            <div style={{...cardSt}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                <div style={{fontSize:12,fontWeight:700,color:DS.silver,letterSpacing:"0.5px"}}>{month+1}월 {selectedDay}일 {clipboard&&<span style={{color:DS.info,fontSize:10}}>📋 우클릭으로 붙여넣기</span>}</div>
-                <button onClick={deletePastEvents} style={{background:"rgba(243,114,127,0.1)",border:`1px solid rgba(243,114,127,0.3)`,borderRadius:9999,padding:"4px 12px",fontSize:11,fontWeight:700,color:DS.negative,cursor:"pointer"}}>🗑 지난 삭제</button>
-              </div>
-              {(()=>{const vis=selItems.filter(i=>!(i.type==="event"&&isPastEvent(i)));return vis.length===0?<div style={{fontSize:13,color:DS.border,textAlign:"center",padding:"16px 0"}}>일정 없음</div>:vis.map(item=><ItemRow key={item.id} item={item}/>);})()}
-            </div>
+            {/* 선택 날짜 패널 */}
+            {selectedDay&&(()=>{
+              const vis=selItems;
+              return(
+                <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:9990,display:"flex",alignItems:"flex-end",justifyContent:"center",backdropFilter:"blur(4px)"}} onClick={()=>setSelectedDay(null)}>
+                  <div style={{background:DS.surface,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:480,maxHeight:"75vh",overflowY:"auto",boxShadow:DS.shadowHeavy,paddingBottom:32}} onClick={e=>e.stopPropagation()}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"20px 20px 0"}}>
+                      <div>
+                        <div style={{fontSize:22,fontWeight:700,color:DS.white}}>{month+1}월 {selectedDay}일</div>
+                        <div style={{fontSize:13,color:DS.silver,marginTop:2}}>{DAYS[(new Date(year,month,selectedDay)).getDay()]}요일 · {vis.length}개 일정</div>
+                      </div>
+                      <button onClick={()=>setSelectedDay(null)} style={{background:DS.surfaceMid,border:"none",borderRadius:"50%",width:34,height:34,cursor:"pointer",fontSize:16,color:DS.silver,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+                    </div>
+                    <div style={{padding:"12px 20px 0"}}>
+                      {vis.length===0?<div style={{fontSize:15,color:DS.border,textAlign:"center",padding:"30px 0"}}>🎉 자유의 날!</div>:vis.map(item=><ItemRow key={item.id} item={item}/>)}
+                      <button onClick={()=>{setEvForm(p=>({...p,date:selDs}));setSelectedDay(null);}} style={{background:DS.green,color:"#000",border:"none",borderRadius:9999,padding:"12px",width:"100%",fontSize:14,fontWeight:700,cursor:"pointer",marginTop:14,letterSpacing:"0.5px"}}>+ 이 날 일정 추가</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Add Event */}
             <div style={{...cardSt}}>
-              <div style={{fontSize:13,fontWeight:700,color:DS.white,marginBottom:14,letterSpacing:"0.3px"}}>일정 추가</div>
-              <input value={evForm.title} onChange={e=>{const t=e.target.value;setEvForm(p=>({...p,title:t,hasMeeting:isMeeting(t)?true:p.hasMeeting}));}} placeholder="일정 제목" style={{...inputSt,marginBottom:10,fontSize:14}}/>
-              <textarea value={evForm.memo||""} onChange={e=>setEvForm(p=>({...p,memo:e.target.value}))} placeholder="📝 메모 (선택)" style={{...textareaSt,height:52,marginBottom:10}}/>
-              <SchedForm val={evForm} onChange={patch=>setEvForm(p=>({...p,...patch}))}/>
-              <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",marginBottom:evForm.hasMeeting?10:14}}>
-                <div onClick={()=>setEvForm(p=>({...p,hasMeeting:!p.hasMeeting}))} style={{width:42,height:24,borderRadius:9999,background:evForm.hasMeeting?DS.green:DS.border,position:"relative",transition:"background 0.2s",cursor:"pointer",flexShrink:0}}>
-                  <div style={{position:"absolute",top:3,left:evForm.hasMeeting?20:3,width:18,height:18,borderRadius:"50%",background:DS.white,transition:"left 0.2s",boxShadow:"0 1px 3px rgba(0,0,0,0.4)"}}/>
-                </div>
-                <span style={{fontSize:13,fontWeight:600,color:DS.white}}>📍 미팅·약속 장소 입력</span>
-                {isMeeting(evForm.title)&&<span style={{fontSize:10,background:"rgba(83,157,245,0.12)",color:DS.info,borderRadius:9999,padding:"2px 8px",fontWeight:700}}>자동감지</span>}
-              </label>
-              {evForm.hasMeeting&&(<div style={{background:"rgba(83,157,245,0.06)",borderRadius:12,padding:"12px",marginBottom:10,border:`1px solid rgba(83,157,245,0.2)`}}><input value={evForm.location} onChange={e=>setEvForm(p=>({...p,location:e.target.value}))} placeholder="주소 또는 링크" style={{...inputSt,marginBottom:8}}/><textarea value={evForm.locationMemo} onChange={e=>setEvForm(p=>({...p,locationMemo:e.target.value}))} placeholder="메모" style={{...textareaSt,height:52}}/></div>)}
-              <button onClick={addEvent} style={{background:DS.green,color:"#000",border:"none",borderRadius:9999,padding:"14px",width:"100%",fontSize:14,fontWeight:700,cursor:"pointer",letterSpacing:"0.5px",boxShadow:DS.shadowMed}}>+ 일정 추가</button>
+              <div style={{fontSize:13,fontWeight:700,color:DS.white,marginBottom:14}}>+ 일정 추가</div>
+              <input value={evForm.title} onChange={e=>setEvForm(p=>({...p,title:e.target.value}))} placeholder="일정 제목을 입력하세요" style={{...inputSt,marginBottom:10,fontSize:15,fontWeight:600}}/>
+              <SchedSub form={evForm} setForm={patch=>setEvForm(p=>({...p,...(typeof patch==="function"?patch(p):patch)}))}/>
+              <button onClick={addEvent} style={{background:DS.green,color:"#000",border:"none",borderRadius:9999,padding:"14px",width:"100%",fontSize:14,fontWeight:700,cursor:"pointer",letterSpacing:"0.5px",boxShadow:DS.shadowMed,marginTop:4}}>+ 일정 추가</button>
             </div>
           </div>
         )}
 
-        {/* ── TODO ── */}
+        {/* TODO */}
         {view==="todo"&&(
           <div>
             <div style={{...cardSt}}>
               <div style={{fontSize:13,fontWeight:700,color:DS.white,marginBottom:14}}>새 할일 추가</div>
-              <input value={tdForm.text} onChange={e=>{const t=e.target.value;setTdForm(p=>({...p,text:t,hasMeeting:isMeeting(t)?true:p.hasMeeting}));}} onKeyDown={e=>e.key==="Enter"&&addTodo()} placeholder="할일 내용 입력..." style={{...inputSt,marginBottom:10,fontSize:14}}/>
+              <input value={tdForm.text} onChange={e=>setTdForm(p=>({...p,text:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&addTodo()} placeholder="할일 내용 입력..." style={{...inputSt,marginBottom:10,fontSize:14}}/>
               <textarea value={tdForm.memo||""} onChange={e=>setTdForm(p=>({...p,memo:e.target.value}))} placeholder="📝 메모 (선택)" style={{...textareaSt,height:52,marginBottom:12}}/>
               <Label>우선순위</Label>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:14}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>
                 {PRIORITIES.map(p=>(<button key={p.id} onClick={()=>setTdForm(prev=>({...prev,priority:p.id}))} style={{border:`1.5px solid ${tdForm.priority===p.id?p.color:DS.border}`,borderRadius:12,padding:"10px 6px",cursor:"pointer",background:tdForm.priority===p.id?p.bg:DS.surfaceHigh,display:"flex",flexDirection:"column",alignItems:"center",gap:3,transition:"all 0.15s"}}><div style={{width:12,height:12,borderRadius:4,background:p.color}}/><div style={{fontSize:13,fontWeight:700,color:tdForm.priority===p.id?p.color:DS.silver}}>{p.id}</div><div style={{fontSize:10,color:tdForm.priority===p.id?p.color:DS.border}}>{p.desc}</div></button>))}
               </div>
               <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",marginBottom:tdForm.hasSchedule?10:0}}>
@@ -671,20 +771,12 @@ function App(){
                 </div>
                 <span style={{fontSize:13,fontWeight:600,color:DS.white}}>📅 일정 & 알람 설정</span>
               </label>
-              {tdForm.hasSchedule&&<SchedForm val={tdForm} onChange={patch=>setTdForm(p=>({...p,...patch}))}/>}
-              <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",marginBottom:tdForm.hasMeeting?10:14,marginTop:tdForm.hasSchedule?0:12}}>
-                <div onClick={()=>setTdForm(p=>({...p,hasMeeting:!p.hasMeeting}))} style={{width:42,height:24,borderRadius:9999,background:tdForm.hasMeeting?DS.green:DS.border,position:"relative",transition:"background 0.2s",cursor:"pointer",flexShrink:0}}>
-                  <div style={{position:"absolute",top:3,left:tdForm.hasMeeting?20:3,width:18,height:18,borderRadius:"50%",background:DS.white,transition:"left 0.2s",boxShadow:"0 1px 3px rgba(0,0,0,0.4)"}}/>
-                </div>
-                <span style={{fontSize:13,fontWeight:600,color:DS.white}}>📍 미팅·약속 장소 입력</span>
-                {isMeeting(tdForm.text)&&<span style={{fontSize:10,background:"rgba(83,157,245,0.12)",color:DS.info,borderRadius:9999,padding:"2px 8px",fontWeight:700}}>자동감지</span>}
-              </label>
-              {tdForm.hasMeeting&&(<div style={{background:"rgba(83,157,245,0.06)",borderRadius:12,padding:"12px",marginBottom:14,border:`1px solid rgba(83,157,245,0.2)`}}><input value={tdForm.location||""} onChange={e=>setTdForm(p=>({...p,location:e.target.value}))} placeholder="주소 또는 링크" style={{...inputSt,marginBottom:8}}/><textarea value={tdForm.locationMemo||""} onChange={e=>setTdForm(p=>({...p,locationMemo:e.target.value}))} placeholder="메모" style={{...textareaSt,height:52}}/></div>)}
-              <button onClick={addTodo} style={{background:DS.green,color:"#000",border:"none",borderRadius:9999,padding:"14px",width:"100%",fontSize:14,fontWeight:700,cursor:"pointer",letterSpacing:"0.5px",boxShadow:DS.shadowMed}}>+ 할일 추가</button>
+              {tdForm.hasSchedule&&<SchedSub form={tdForm} setForm={patch=>setTdForm(p=>({...p,...patch}))}/>}
+              <button onClick={addTodo} style={{background:DS.green,color:"#000",border:"none",borderRadius:9999,padding:"14px",width:"100%",fontSize:14,fontWeight:700,cursor:"pointer",letterSpacing:"0.5px",boxShadow:DS.shadowMed,marginTop:12}}>+ 할일 추가</button>
             </div>
 
-            {/* Date Swipe */}
-            <div onTouchStart={onTodoTS} onTouchEnd={onTodoTE} style={{...cardSt,userSelect:"none"}}>
+            {/* Date navigator */}
+            <div style={{...cardSt}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
                 <button onClick={()=>setTodoDateOffset(p=>p-1)} style={{background:DS.surfaceMid,border:"none",borderRadius:"50%",width:32,height:32,cursor:"pointer",fontSize:16,color:DS.white,display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
                 <div style={{textAlign:"center"}}>
@@ -693,10 +785,8 @@ function App(){
                 </div>
                 <button onClick={()=>setTodoDateOffset(p=>p+1)} style={{background:DS.surfaceMid,border:"none",borderRadius:"50%",width:32,height:32,cursor:"pointer",fontSize:16,color:DS.white,display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
               </div>
-              <div style={{fontSize:10,color:DS.border,textAlign:"center",marginBottom:10,letterSpacing:"0.5px"}}>← 스와이프로 날짜 이동 →</div>
               {(()=>{
-                const isPast=todoViewDs<todayStr();
-                const dt=items.filter(i=>i.type==="todo"&&i.date===todoViewDs&&(!i.done||(i.doneDate&&i.doneDate===todoViewDs))&&(!isPast));
+                const dt=items.filter(i=>i.type==="todo"&&i.date===todoViewDs&&!i.done);
                 const de=items.filter(i=>i.type==="event"&&coversDate(i,todoViewDs)&&!isPastEvent(i));
                 if(dt.length===0&&de.length===0)return <div style={{fontSize:13,color:DS.border,textAlign:"center",padding:"12px 0"}}>{todoViewLabel} 일정/할일 없음</div>;
                 return [...dt,...de].map(item=><ItemRow key={item.id} item={item}/>);
@@ -705,7 +795,7 @@ function App(){
             </div>
 
             {/* Priority Groups */}
-            {PRIORITIES.map(p=>{const its=todos.filter(t=>t.priority===p.id&&(!t.done||(t.doneDate&&t.doneDate===todoViewDs))&&!(t.date&&t.date<todayStr()&&!t.done));if(!its.length)return null;return(
+            {PRIORITIES.map(p=>{const its=todos.filter(t=>t.priority===p.id&&!t.done&&!(t.date&&t.date<todayStr()));if(!its.length)return null;return(
               <div key={p.id} style={{marginBottom:12}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,padding:"0 4px"}}>
                   <div style={{width:10,height:10,borderRadius:3,background:p.color}}/>
@@ -729,26 +819,6 @@ function App(){
           </div>
         )}
 
-        {/* ── AI ── */}
-        {view==="ai"&&(
-          <div>
-            <div style={{...cardSt}}>
-              <div style={{fontSize:13,color:DS.silver,marginBottom:14,lineHeight:1.6}}>오늘의 일정과 할일을 분석해 조언을 받아보세요</div>
-              <button onClick={()=>askAI(buildSummary())} disabled={aiLoad} style={{background:DS.green,color:"#000",border:"none",borderRadius:9999,padding:"14px",width:"100%",fontSize:14,fontWeight:700,cursor:"pointer",opacity:aiLoad?0.5:1,letterSpacing:"0.5px",boxShadow:DS.shadowMed}}>{aiLoad?"⏳ 분석 중...":"🤖 오늘 요약 & 조언 받기"}</button>
-            </div>
-            {aiResp&&(
-              <div style={{...cardSt}}>
-                <div style={{fontSize:11,fontWeight:700,color:DS.green,marginBottom:12,letterSpacing:"1px",textTransform:"uppercase"}}>AI 비서 답변</div>
-                <div style={{fontSize:14,color:DS.white,lineHeight:1.9,whiteSpace:"pre-wrap"}}>{aiResp}</div>
-              </div>
-            )}
-            <div style={{...cardSt}}>
-              <Label>직접 질문하기</Label>
-              <textarea value={chatIn} onChange={e=>setChatIn(e.target.value)} placeholder="예: 오늘 가장 중요한 일은?" style={{...textareaSt,height:80,marginBottom:10}}/>
-              <button onClick={()=>askAI()} disabled={aiLoad||!chatIn.trim()} style={{background:chatIn.trim()?DS.green:"transparent",color:chatIn.trim()?"#000":DS.border,border:`1px solid ${chatIn.trim()?DS.green:DS.border}`,borderRadius:9999,padding:"12px",width:"100%",fontSize:14,fontWeight:700,cursor:"pointer",opacity:(aiLoad||!chatIn.trim())?0.4:1,transition:"all 0.2s",letterSpacing:"0.5px"}}>전송</button>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Bottom Nav */}
@@ -765,58 +835,23 @@ function App(){
   );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
 </script>
-
 <script>
-(function(){
-  if(!('serviceWorker' in navigator))return;
-
-  const VAPID_KEY = 'BDtiEivI0LFwPdrKw5g8KmtvjC4R_bbtrnlHyKlT0u8Pj4i9rDhRERfUZo-vTo5Wi8cDPGuedHvaGccIm1ejK_g';
-
-  // SW 등록
-  navigator.serviceWorker.register('./sw.js').then(async reg => {
-    console.log('[FCM] SW 등록 완료');
-
-    // 알림 권한 요청
-    const permission = await Notification.requestPermission();
-    if(permission !== 'granted'){
-      console.warn('[FCM] 알림 권한 거부됨');
-      return;
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('/sw.js').catch(()=>{});
+}
+window.addEventListener('load',()=>{
+  const splash=document.getElementById('splash');
+  const check=setInterval(()=>{
+    if(document.getElementById('root').children.length>0){
+      clearInterval(check);
+      splash.classList.add('hide');
+      setTimeout(()=>splash.remove(),400);
     }
-
-    // FCM 토큰 발급
-    try {
-      const token = await messaging.getToken({
-        vapidKey: VAPID_KEY,
-        serviceWorkerRegistration: reg,
-      });
-      if(token){
-        console.log('[FCM] 토큰 발급:', token.slice(0,20)+'...');
-        // 서버에 토큰 저장
-        await fetch('/.netlify/functions/save-token', {
-          method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({token}),
-        });
-      }
-    } catch(err){
-      console.warn('[FCM] 토큰 발급 실패:', err);
-    }
-  }).catch(err => console.warn('[SW] 등록 실패', err));
-
-  // 포그라운드 메시지 수신
-  messaging.onMessage(payload => {
-    const {title, body} = payload.notification || {};
-    if(Notification.permission === 'granted'){
-      new Notification(title || '⏰ 알람', {
-        body: body || '일정 알람',
-        icon: '/icon-192.png',
-        requireInteraction: true,
-      });
-    }
-  });
-})();
+  },50);
+  setTimeout(()=>{splash.classList.add('hide');setTimeout(()=>splash.remove(),400);},8000);
+});
 </script>
 </body>
 </html>
