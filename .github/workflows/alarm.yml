@@ -1,11 +1,14 @@
-name: Send Alarms
+name: Send Alarm
+
 on:
   schedule:
-    - cron: '* * * * *'
+    - cron: '* * * * *'  # 매 1분마다
   workflow_dispatch:
+
 jobs:
-  trigger-alarm:
+  send-alarm:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger
-        run: curl -s -X POST "https://gentle-speculoos-fe66c3.netlify.app/.netlify/functions/send-alarm"
+      - name: Call Netlify Function
+        run: |
+          curl -X POST https://gentle-douhua-15ac7d.netlify.app/.netlify/functions/send-alarm
