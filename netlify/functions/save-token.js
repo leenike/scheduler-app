@@ -1,54 +1,32 @@
 const { initializeApp, cert, getApps } = require('firebase-admin/app');
-const { getFirestore } = require('firebase-admin/firestore');
+const { getDatabase } = require('firebase-admin/database');
 
 if (!getApps().length) {
+  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
   initializeApp({
-    credential: cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    }),
+    credential: cert(serviceAccount),
+    databaseURL: "https://scheduler-app-806ec-default-rtdb.firebaseio.com"
   });
 }
 
-const db = getFirestore();
+const db = getDatabase();
 
 exports.handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      },
-      body: '',
-    };
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, body: 'Method not allowed' };
   }
 
   try {
     const { token } = JSON.parse(event.body);
-    if (!token) return { statusCode: 400, body: 'token required' };
+    if (!token) return { statusCode: 400, body: 'no token' };
 
-    const ref = db.collection('scheduler').doc('fcm_tokens');
-    const snap = await ref.get();
-    const tokens = snap.exists ? (snap.data().tokens || []) : [];
+    // 토큰을 key로 저장 (중복 방지)
+    const safeKey = token.replace(/[.#$[\]]/g, '_').slice(0, 100);
+    await db.ref(`scheduler/fcmTokens/${safeKey}`).set(token);
 
-    if (!tokens.includes(token)) {
-      tokens.push(token);
-      await ref.set({ tokens });
-    }
-
-    return {
-      statusCode: 200,
-      headers: { 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify({ ok: true }),
-    };
+    return { statusCode: 200, body: 'token saved' };
   } catch (err) {
-    return {
-      statusCode: 500,
-      headers: { 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify({ error: err.message }),
-    };
+    console.error('save-token error:', err);
+    return { statusCode: 500, body: err.message };
   }
 };
