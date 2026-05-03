@@ -21,11 +21,13 @@ exports.handler = async () => {
     // items 가져오기 (Realtime Database)
     const itemsSnap = await db.ref('scheduler/items').get();
     if (!itemsSnap.exists()) return { statusCode: 200, body: 'no items' };
-    const items = itemsSnap.val() || [];
+    const itemsRaw = itemsSnap.val() || {};
+    const items = Array.isArray(itemsRaw) ? itemsRaw : Object.values(itemsRaw);
 
     // FCM 토큰 가져오기
     const tokenSnap = await db.ref('scheduler/fcmTokens').get();
-    const tokens = tokenSnap.exists() ? Object.values(tokenSnap.val()) : [];
+    const tokensRaw = tokenSnap.exists() ? tokenSnap.val() : {};
+    const tokens = Object.values(tokensRaw).filter(t => t && t !== 'test');
     if (tokens.length === 0) return { statusCode: 200, body: 'no tokens' };
 
     const messages = [];
