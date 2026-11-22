@@ -264,7 +264,7 @@ function EditModal({item,onSave,onClose}){
             </div>
           </div>
         )}
-        {form.type==="event"&&<SchedSub form={form} setForm={setForm}/>}
+        {form.type==="event"&&<SchedSub form={form} setForm={patch=>setForm(p=>({...p,...(typeof patch==="function"?patch(p):patch)}))}/>}
         {form.type==="todo"&&(
           <>
             <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",marginBottom:form.date?10:12}}>
@@ -273,7 +273,7 @@ function EditModal({item,onSave,onClose}){
               </div>
               <span style={{fontSize:13,fontWeight:600,color:DS.white}}>📅 일정 & 알람</span>
             </label>
-            {form.date&&<SchedSub form={form} setForm={setForm}/>}
+            {form.date&&<SchedSub form={form} setForm={patch=>setForm(p=>({...p,...(typeof patch==="function"?patch(p):patch)}))}/>}
           </>
         )}
         <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",marginBottom:form.hasMeeting?10:12}}>
